@@ -50,10 +50,10 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
 
-  <!-- Database Connection Banner (Indicates Local vs Supabase Mode) -->
+  <!-- Database Connection Banner -->
   <div id="dbStatusBanner" class="bg-amber-500 text-white text-[11px] py-1.5 px-4 text-center font-medium flex items-center justify-center space-x-2 no-print">
     <i data-lucide="laptop" class="w-3.5 h-3.5"></i>
-    <span id="dbStatusText">โหมดทดสอบในเครื่อง (Local Storage Mode) — บันทึกข้อมูลและทดสอบใน VS Code ได้ทันที</span>
+    <span id="dbStatusText">โหมดทดสอบในเครื่อง (Local Storage Mode) — กำลังเตรียมเชื่อมต่อ...</span>
     <button onclick="openSupabaseConfigModal()" class="ml-2 underline text-amber-100 hover:text-white font-bold cursor-pointer">ตั้งค่าเชื่อมต่อ Supabase</button>
   </div>
 
@@ -63,8 +63,8 @@
         
         <!-- App Logo & Branding -->
         <div class="flex items-center space-x-3 cursor-pointer" onclick="goToHome()">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-blue-700 flex items-center justify-center text-white shadow-md shadow-sky-200">
-            <i data-lucide="calendar-check-2" class="w-6 h-6"></i>
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-blue-700 flex items-center justify-center text-white shadow-md shadow-sky-200 overflow-hidden">
+            <img src="logo.png" alt="Logo" class="w-full h-full object-cover" onerror="this.onerror=null; this.parentElement.innerHTML='<i data-lucide=\'calendar-check-2\' class=\'w-6 h-6\'></i>'; lucide.createIcons();">
           </div>
           <div>
             <div class="flex items-center space-x-2">
@@ -144,7 +144,7 @@
           <span class="text-transparent bg-clip-text bg-gradient-to-r from-sky-600 to-indigo-600">ประเภทเดียว ไม่ต้องรออนุมัติ</span>
         </h2>
         <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
-          เข้าสู่ระบบด้วยชื่อผู้ใช้งานและรหัสผ่านเพื่อแจ้งวันลา บันทึกประวัติ ดูปฏิทินงานร่วมกับเพื่อนร่วมงาน และพิมพ์ใบแจ้งลาได้ทันที
+          เข้าสู่ระบบเพื่อแจ้งวันลา บันทึกประวัติ ดูปฏิทินงานร่วมกับเพื่อนร่วมงาน และพิมพ์ใบแจ้งลาได้ทันที
         </p>
 
         <div class="space-y-3 pt-2">
@@ -179,11 +179,8 @@
 
         <!-- Quick Demo Accounts -->
         <div class="pt-4 border-t border-slate-200">
-          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">บัญชีทดสอบด่วน (คลิกเพื่อเข้าสู่ระบบ):</p>
+          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">บัญชีทดสอบเริ่มต้น:</p>
           <div class="flex flex-wrap gap-2">
-            <button onclick="quickLogin('somchai', 'password123')" class="px-3 py-1.5 bg-white border border-slate-200 hover:border-sky-400 hover:bg-sky-50 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center shadow-sm">
-              <i data-lucide="user" class="w-3.5 h-3.5 mr-1.5 text-sky-600"></i> นายสมชาย (บุคลากรทั่วไป)
-            </button>
             <button onclick="quickLogin('admin', '123456')" class="px-3 py-1.5 bg-indigo-50 border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100 text-indigo-800 rounded-xl text-xs font-semibold transition flex items-center shadow-sm">
               <i data-lucide="shield-check" class="w-3.5 h-3.5 mr-1.5 text-indigo-600"></i> ผู้ดูแลระบบ (admin / 123456)
             </button>
@@ -207,17 +204,17 @@
         <!-- 1. LOGIN FORM -->
         <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อผู้ใช้งาน (Username) หรือ อีเมล</label>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อผู้ใช้งาน (Username)</label>
             <div class="relative">
               <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
-              <input type="text" id="loginUsername" required placeholder="กรอก Username" class="w-full text-xs sm:text-sm pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              <input type="text" id="loginUsername" required placeholder="กรอก Username (เช่น admin)" class="w-full text-xs sm:text-sm pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
             </div>
           </div>
 
           <div>
             <div class="flex justify-between items-center mb-1">
               <label class="block text-xs font-semibold text-slate-700">รหัสผ่าน</label>
-              <a href="javascript:void(0)" onclick="showToast('บัญชี admin รหัสคือ 123456 | บุคลากรทั่วไปรหัสคือ password123')" class="text-[11px] text-sky-600 hover:underline">ช่วยเหลือเรื่องรหัสผ่าน</a>
+              <span class="text-[11px] text-slate-400">Admin รหัสผ่าน: 123456</span>
             </div>
             <div class="relative">
               <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
@@ -631,7 +628,7 @@
               <option value="ฝ่ายทรัพยากรบุคคล">ฝ่ายทรัพยากรบุคคล</option>
               <option value="ฝ่ายบริหารทั่วไปและสารบรรณ">ฝ่ายบริหารทั่วไปและสารบรรณ</option>
               <option value="ฝ่ายการเงินและพัสดุ">ฝ่ายการเงินและพัสดุ</option>
-              <option value="ไม่ระบุฝ่ายงาน (รอจัดสรร)">ไม่ระบุฝ่ายงาน (รอจัดสรร)</option>
+              <option value="บุคลากรทั่วไป">บุคลากรทั่วไป</option>
             </select>
           </div>
           <div>
@@ -812,13 +809,13 @@
       </div>
 
       <p class="text-xs text-slate-600 leading-relaxed">
-        หากต้องการต่อกับฐานข้อมูล Supabase ของจริง ให้นำ <strong>Project URL</strong> และ <strong>Anon Key</strong> จาก Supabase Dashboard มาใส่ที่นี่ (หากเว้นว่างไว้ ระบบจะทำงานในโหมด LocalStorage ในเครื่อง):
+        ระบุ <strong>Project URL</strong> และ <strong>Anon Key</strong> จาก Supabase Dashboard เพื่อเชื่อมต่อฐานข้อมูลคลาวด์จริง:
       </p>
 
       <div class="space-y-3">
         <div>
           <label class="block text-xs font-semibold text-slate-700 mb-1">Project URL</label>
-          <input type="text" id="supabaseUrlInput" placeholder="https://your-project.supabase.co" class="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-sky-500">
+          <input type="text" id="supabaseUrlInput" placeholder="https://dekylnxajrvnepdwghnz.supabase.co" class="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-sky-500">
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-700 mb-1">Anon / Public API Key</label>
@@ -851,11 +848,11 @@
 
       <div id="slipPrintArea" class="printable-zone p-6 space-y-4 text-xs sm:text-sm text-slate-800">
         <div class="text-center border-b pb-4">
-          <div class="w-12 h-12 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center mx-auto mb-2 font-bold text-slate-700 text-sm">
-            ครุฑ
+          <div class="w-14 h-14 rounded-xl mx-auto mb-2 flex items-center justify-center overflow-hidden">
+            <img src="logo.png" alt="Logo" class="max-w-full max-h-full object-contain" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'w-12 h-12 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center font-bold text-slate-700 text-xs\'>ตราสัญลักษณ์</div>';">
           </div>
           <h2 class="font-bold text-base text-slate-900">ใบแจ้งการลาบุคลากร</h2>
-          <p class="text-xs text-slate-500 mt-0.5">ระบบสารบรรณและบันทึกเวลาปฏิบัติงานออนไลน์</p>
+          <p class="text-xs text-slate-500 mt-0.5">สำนักงานตรวจบัญชีสหกรณ์สตูล</p>
         </div>
 
         <div class="grid grid-cols-2 gap-3 py-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -1025,17 +1022,20 @@
 
   <script>
     // -------------------------------------------------------------
-    // 1. SUPABASE CLIENT & LOCAL STORAGE HYBRID ENGINE
+    // 1. SUPABASE CLIENT & HYBRID ENGINE
     // -------------------------------------------------------------
+    // จุดสำคัญ: ใส่ URL และ Anon Key ของคุณตรงนี้
+    const HARDCODED_SB_URL = 'https://dekylnxajrvnepdwghnz.supabase.co';
+    const HARDCODED_SB_KEY = 'dekylnxajrvnepdwghnz';
+
     let supabaseClient = null;
 
-    // Check if user has saved Supabase credentials in localStorage
-    const savedSbUrl = localStorage.getItem('SB_URL') || '';
-    const savedSbKey = localStorage.getItem('SB_ANON_KEY') || '';
+    const activeSbUrl = (HARDCODED_SB_URL && !HARDCODED_SB_URL.includes('วาง_')) ? HARDCODED_SB_URL : (localStorage.getItem('SB_URL') || '');
+    const activeSbKey = (HARDCODED_SB_KEY && !HARDCODED_SB_KEY.includes('วาง_')) ? HARDCODED_SB_KEY : (localStorage.getItem('SB_ANON_KEY') || '');
 
-    if (savedSbUrl && savedSbKey && window.supabase) {
+    if (activeSbUrl && activeSbKey && window.supabase) {
       try {
-        supabaseClient = window.supabase.createClient(savedSbUrl, savedSbKey);
+        supabaseClient = window.supabase.createClient(activeSbUrl, activeSbKey);
         updateDbBanner(true);
       } catch (err) {
         console.error("Supabase init error:", err);
@@ -1053,13 +1053,13 @@
         text.innerHTML = "เชื่อมต่อฐานข้อมูล Supabase สำเร็จ (Real-time Cloud Database)";
       } else {
         banner.className = "bg-amber-500 text-white text-[11px] py-1.5 px-4 text-center font-medium flex items-center justify-center space-x-2 no-print";
-        text.innerHTML = "โหมดทดสอบในเครื่อง (Local Storage Mode) — ทำงานได้ทันทีโดยไม่ต้องตั้งค่า";
+        text.innerHTML = "โหมดทดสอบในเครื่อง (Local Storage Mode) — ยังไม่ได้ใส่อนุมัติ Supabase Key หรือ Key ไม่ถูกต้อง";
       }
     }
 
     function openSupabaseConfigModal() {
-      document.getElementById('supabaseUrlInput').value = localStorage.getItem('SB_URL') || '';
-      document.getElementById('supabaseKeyInput').value = localStorage.getItem('SB_ANON_KEY') || '';
+      document.getElementById('supabaseUrlInput').value = activeSbUrl || '';
+      document.getElementById('supabaseKeyInput').value = activeSbKey || '';
       document.getElementById('supabaseConfigModal').classList.remove('hidden');
       lucide.createIcons();
     }
@@ -1082,7 +1082,7 @@
       try {
         supabaseClient = window.supabase.createClient(url, key);
         updateDbBanner(true);
-        showToast("เชื่อมต่อ Supabase สำเร็จ! รีเฟรชเพื่อซิงค์ข้อมูล");
+        showToast("เชื่อมต่อ Supabase สำเร็จ! กำลังโหลดข้อมูล...");
         closeSupabaseConfigModal();
         loadInitialData();
       } catch (e) {
@@ -1104,31 +1104,7 @@
     // -------------------------------------------------------------
     const initialUsers = [
       {
-        id: "USR-001",
-        username: "somchai",
-        password: "password123",
-        fullName: "นายสมชาย ใจภักดี",
-        position: "เจ้าพนักงานธุรการชำนาญงาน",
-        department: "ฝ่ายบริหารทั่วไปและสารบรรณ",
-        phone: "081-222-3344",
-        role: "staff",
-        annualQuota: 15,
-        avatar: "ส"
-      },
-      {
-        id: "USR-002",
-        username: "wannapa",
-        password: "password123",
-        fullName: "นางสาววรรณภา สดใส",
-        position: "นักวิชาการคอมพิวเตอร์",
-        department: "ฝ่ายเทคโนโลยีสารสนเทศ",
-        phone: "089-333-4455",
-        role: "staff",
-        annualQuota: 15,
-        avatar: "ว"
-      },
-      {
-        id: "USR-003",
+        id: "USR-ADMIN",
         username: "admin",
         password: "123456",
         fullName: "ผู้ดูแลระบบ (Admin)",
@@ -1140,59 +1116,21 @@
         avatar: "A"
       },
       {
-        id: "USR-004",
-        username: "kanda",
+        id: "USR-001",
+        username: "somchai",
         password: "password123",
-        fullName: "นางกานดา มณีรัตน์",
-        position: "นักวิชาการเงินและบัญชี",
-        department: "ฝ่ายการเงินและพัสดุ",
-        phone: "086-555-6677",
+        fullName: "นายสมชาย ใจภักดี",
+        position: "เจ้าพนักงานธุรการชำนาญงาน",
+        department: "ฝ่ายบริหารทั่วไปและสารบรรณ",
+        phone: "081-222-3344",
         role: "staff",
         annualQuota: 15,
-        avatar: "ก"
+        avatar: "ส"
       }
     ];
 
-    const initialLeaves = [
-      {
-        id: "LV-202610-001",
-        userId: "USR-001",
-        userName: "นายสมชาย ใจภักดี",
-        userPosition: "เจ้าพนักงานธุรการชำนาญงาน",
-        userDepartment: "ฝ่ายบริหารทั่วไปและสารบรรณ",
-        leaveType: "การลา",
-        startDate: "2026-10-05",
-        endDate: "2026-10-06",
-        period: "FULL",
-        days: 2,
-        reason: "มีธุระจำเป็นเดินทางไปต่างจังหวัดและพักผ่อน",
-        substitute: "นางสาววรรณภา สดใส",
-        contact: "081-222-3344",
-        loggedAt: "2026-10-01 08:30",
-        status: "บันทึกเรียบร้อย"
-      },
-      {
-        id: "LV-202610-002",
-        userId: "USR-002",
-        userName: "นางสาววรรณภา สดใส",
-        userPosition: "นักวิชาการคอมพิวเตอร์",
-        userDepartment: "ฝ่ายเทคโนโลยีสารสนเทศ",
-        leaveType: "การลา",
-        startDate: "2026-10-01",
-        endDate: "2026-10-01",
-        period: "FULL",
-        days: 1,
-        reason: "ป่วยมีไข้ พบแพทย์เพื่อรับการรักษา",
-        substitute: "นายสมชาย ใจภักดี",
-        contact: "089-333-4455",
-        loggedAt: "2026-10-01 07:50",
-        status: "บันทึกเรียบร้อย"
-      }
-    ];
-
-    // Load from LocalStorage if available, otherwise use initial
     let users = JSON.parse(localStorage.getItem('LOCAL_USERS') || 'null') || [...initialUsers];
-    let leaveRecords = JSON.parse(localStorage.getItem('LOCAL_LEAVES') || 'null') || [...initialLeaves];
+    let leaveRecords = JSON.parse(localStorage.getItem('LOCAL_LEAVES') || 'null') || [];
 
     function saveLocalData() {
       localStorage.setItem('LOCAL_USERS', JSON.stringify(users));
@@ -1218,50 +1156,54 @@
       calculateFormDays();
 
       loadInitialData();
-      quickLogin('somchai', 'password123');
+      quickLogin('admin', '123456');
       lucide.createIcons();
     });
 
     async function loadInitialData() {
       if (supabaseClient) {
         try {
-          // Fetch profiles
-          const { data: profiles, error: pErr } = await supabaseClient.from('profiles').select('*');
-          if (!pErr && profiles && profiles.length > 0) {
-            users = profiles.map(p => ({
-              id: p.id,
-              username: p.username || p.full_name,
-              fullName: p.full_name,
-              position: p.position,
-              department: p.department,
-              phone: p.phone,
-              role: p.role,
-              annualQuota: p.annual_quota || 15,
-              avatar: p.full_name ? p.full_name.charAt(0) : 'บ'
+          // ดึงรายชื่อบุคลากรจากตาราง users
+          const { data: dbUsers, error: uErr } = await supabaseClient.from('users').select('*');
+          if (!uErr && dbUsers && dbUsers.length > 0) {
+            users = dbUsers.map(u => ({
+              id: u.id,
+              username: u.username,
+              password: u.password,
+              fullName: u.full_name,
+              position: u.position,
+              department: u.department || 'บุคลากรทั่วไป',
+              phone: u.phone,
+              role: u.role || 'staff',
+              annualQuota: parseFloat(u.leave_quota || 15),
+              avatar: u.full_name ? u.full_name.charAt(0) : 'บ'
             }));
+            saveLocalData();
           }
 
-          // Fetch leaves
-          const { data: leaves, error: lErr } = await supabaseClient.from('leave_records').select('*').order('created_at', { ascending: false });
-          if (!lErr && leaves && leaves.length > 0) {
-            leaveRecords = leaves.map(l => ({
+          // ดึงรายการประวัติการลาจากตาราง leave_records
+          const { data: dbLeaves, error: lErr } = await supabaseClient.from('leave_records').select('*').order('created_at', { ascending: false });
+          if (!lErr && dbLeaves) {
+            leaveRecords = dbLeaves.map(l => ({
               id: l.id,
               userId: l.user_id,
-              userName: l.user_name,
-              userPosition: l.user_position,
-              userDepartment: l.user_department,
-              leaveType: l.leave_type || "การลา",
+              userName: l.full_name,
+              userPosition: '-',
+              userDepartment: l.department || 'บุคลากรทั่วไป',
+              leaveType: "การลา",
               startDate: l.start_date,
               endDate: l.end_date,
-              period: l.period,
+              period: l.period || 'FULL',
               days: parseFloat(l.days),
               reason: l.reason,
-              substitute: l.substitute,
-              contact: l.contact,
+              substitute: l.substitute_name,
+              contact: l.contact_phone,
               loggedAt: l.created_at ? l.created_at.substring(0, 16).replace('T', ' ') : '',
               status: l.status || "บันทึกเรียบร้อย"
             }));
+            saveLocalData();
           }
+
           if (currentUser) {
             updateStaffStats();
             renderUserHistoryTable();
@@ -1359,14 +1301,14 @@
       }
 
       const avatarLetter = fullName.charAt(0) || "บ";
-      const newUserId = `USR-${String(users.length + 1).padStart(3, '0')}`;
+      const newUserId = `USR-${Date.now().toString().slice(-5)}`;
       const newUser = {
         id: newUserId,
         username: username,
         password: password,
         fullName: fullName,
         position: position,
-        department: "ไม่ระบุฝ่ายงาน (รอจัดสรร)",
+        department: "บุคลากรทั่วไป",
         phone: phone,
         role: "staff",
         annualQuota: 15,
@@ -1376,26 +1318,27 @@
       users.push(newUser);
       saveLocalData();
 
-      // If connected to Supabase, sync profile
+      // บันทึกลงตาราง users ใน Supabase
       if (supabaseClient) {
         try {
-          await supabaseClient.from('profiles').insert([{
+          await supabaseClient.from('users').insert([{
             id: newUserId,
             username: username,
+            password: password,
             full_name: fullName,
             position: position,
-            department: "ไม่ระบุฝ่ายงาน (รอจัดสรร)",
+            department: "บุคลากรทั่วไป",
             phone: phone,
             role: "staff",
-            annual_quota: 15
+            leave_quota: 15
           }]);
         } catch (err) {
-          console.warn("Could not insert to Supabase:", err);
+          console.warn("Could not insert to Supabase users:", err);
         }
       }
 
       document.getElementById('registerForm').reset();
-      showToast(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับ ${fullName} (สิทธิ์: บุคลากรทั่วไป)`);
+      showToast(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับ ${fullName}`);
       loginUser(newUser);
     }
 
@@ -1586,23 +1529,21 @@
       leaveRecords.unshift(newRecord);
       saveLocalData();
 
-      // Sync to Supabase if available
+      // บันทึกลงตาราง leave_records ใน Supabase
       if (supabaseClient) {
         try {
           await supabaseClient.from('leave_records').insert([{
             id: newId,
             user_id: currentUser.id,
-            user_name: currentUser.fullName,
-            user_position: currentUser.position,
-            user_department: currentUser.department,
-            leave_type: "การลา",
+            full_name: currentUser.fullName,
+            department: currentUser.department,
             start_date: startDate,
             end_date: endDate,
             period: period,
             days: days,
             reason: reason,
-            substitute: substitute,
-            contact: contact,
+            substitute_name: substitute,
+            contact_phone: contact,
             status: "บันทึกเรียบร้อย"
           }]);
         } catch (err) {
@@ -1928,7 +1869,7 @@
 
       if (supabaseClient) {
         try {
-          await supabaseClient.from('profiles').update({ role: target.role }).eq('id', target.id);
+          await supabaseClient.from('users').update({ role: target.role }).eq('id', target.id);
         } catch (e) {
           console.warn("Could not update role in Supabase:", e);
         }
@@ -1999,7 +1940,7 @@
       if (!ctx) return;
 
       const months = ['ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.'];
-      const counts = [0, 0, 2, 2];
+      const counts = [0, 0, 1, leaveRecords.length];
 
       if (monthlyChart) monthlyChart.destroy();
 
