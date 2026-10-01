@@ -1,0 +1,2272 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบแจ้งลาและบันทึกประวัติการลาบุคลากร</title>
+  <!-- Google Fonts: Sarabun & Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Supabase JS Client v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            prompt: ['Prompt', 'sans-serif'],
+            sarabun: ['Sarabun', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Sarabun', sans-serif; }
+    h1, h2, h3, h4, h5, .font-heading { font-family: 'Prompt', sans-serif; }
+    
+    @media print {
+      body * { visibility: hidden; }
+      #printSlipModal, #printSlipModal *, #executiveReportModal, #executiveReportModal * { visibility: visible; }
+      .printable-zone {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 20px;
+        background: white !important;
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- Database Connection Banner (Indicates Local vs Supabase Mode) -->
+  <div id="dbStatusBanner" class="bg-amber-500 text-white text-[11px] py-1.5 px-4 text-center font-medium flex items-center justify-center space-x-2 no-print">
+    <i data-lucide="laptop" class="w-3.5 h-3.5"></i>
+    <span id="dbStatusText">โหมดทดสอบในเครื่อง (Local Storage Mode) — บันทึกข้อมูลและทดสอบใน VS Code ได้ทันที</span>
+    <button onclick="openSupabaseConfigModal()" class="ml-2 underline text-amber-100 hover:text-white font-bold cursor-pointer">ตั้งค่าเชื่อมต่อ Supabase</button>
+  </div>
+
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        
+        <!-- App Logo & Branding -->
+        <div class="flex items-center space-x-3 cursor-pointer" onclick="goToHome()">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-blue-700 flex items-center justify-center text-white shadow-md shadow-sky-200">
+            <i data-lucide="calendar-check-2" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">ระบบแจ้งวันลาบุคลากร</h1>
+              <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 mr-1 animate-pulse"></span> ระบบแจ้งลาทันที
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 font-medium hidden sm:block">สำนักงานตรวจบัญชีสหกรณ์สตูล พัฒนาโดยนายปรัชญา ศิริภูรี</p>
+          </div>
+        </div>
+
+        <!-- Navigation Right: Logged In User State -->
+        <div id="headerAuthNav" class="hidden flex items-center space-x-2 sm:space-x-4">
+          <!-- Role Switcher (Shown if user has Admin privileges) -->
+          <div id="adminToggleContainer" class="hidden inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <button id="roleStaffBtn" onclick="switchUserRole('staff')" class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold transition bg-white text-sky-700 shadow-sm flex items-center">
+              <i data-lucide="user" class="w-3.5 h-3.5 mr-1"></i>
+              <span class="hidden sm:inline">โหมด</span>บุคลากร
+            </button>
+            <button id="roleAdminBtn" onclick="switchUserRole('admin')" class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition flex items-center">
+              <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 mr-1"></i>
+              <span class="hidden sm:inline">โหมด</span>ผู้ดูแล/รายงาน
+            </button>
+          </div>
+
+          <!-- User Profile Display -->
+          <div class="flex items-center bg-slate-100/90 pl-2 pr-3 py-1.5 rounded-xl border border-slate-200">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-inner" id="navAvatar">
+              ส
+            </div>
+            <div class="ml-2.5 text-left hidden sm:block">
+              <div class="text-xs font-bold text-slate-800 flex items-center space-x-1" id="navFullName">
+                <span>นายสมชาย ใจภักดี</span>
+              </div>
+              <div class="text-[11px] text-slate-500 truncate max-w-[150px]" id="navDepartment">
+                ฝ่ายเทคโนโลยีสารสนเทศ
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings & Logout -->
+          <button onclick="openSupabaseConfigModal()" title="ตั้งค่าเชื่อมต่อ Supabase" class="p-2 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition">
+            <i data-lucide="database" class="w-4 h-4"></i>
+          </button>
+          <button onclick="handleLogout()" title="ออกจากระบบ" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Navigation Right: Guest State -->
+        <div id="headerGuestNav" class="flex items-center space-x-2">
+          <button onclick="showAuthModal('login')" class="px-3.5 py-1.5 text-slate-700 hover:bg-slate-100 text-xs sm:text-sm font-semibold rounded-xl transition">
+            เข้าสู่ระบบ
+          </button>
+          <button onclick="showAuthModal('register')" class="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition">
+            สมัครสมาชิก
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- AUTHENTICATION GATEWAY SECTION -->
+  <section id="authGatewaySection" class="flex-grow flex items-center justify-center px-4 py-8">
+    <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+      
+      <!-- Left Column: Branding and System Highlights -->
+      <div class="md:col-span-5 space-y-4">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-sky-600"></i>
+          <span>ระบบบันทึกวันลาออนไลน์</span>
+        </div>
+        <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+          แจ้งการลาสะดวกรวดเร็ว <br>
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-sky-600 to-indigo-600">ประเภทเดียว ไม่ต้องรออนุมัติ</span>
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+          เข้าสู่ระบบด้วยชื่อผู้ใช้งานและรหัสผ่านเพื่อแจ้งวันลา บันทึกประวัติ ดูปฏิทินงานร่วมกับเพื่อนร่วมงาน และพิมพ์ใบแจ้งลาได้ทันที
+        </p>
+
+        <div class="space-y-3 pt-2">
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="check" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h4 class="text-xs font-bold text-slate-800">การลามีประเภทเดียว ("การลา")</h4>
+              <p class="text-[12px] text-slate-500">ลดความยุ่งยาก บันทึกแล้วมีผลลงสารบรรณและปฏิทินทันที</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="printer" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h4 class="text-xs font-bold text-slate-800">พิมพ์ใบแจ้งการลา (Leave Slip)</h4>
+              <p class="text-[12px] text-slate-500">ออกเอกสารหลักฐานพร้อมรหัสอ้างอิงส่งสารบรรณได้ตลอดเวลา</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="shield-check" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h4 class="text-xs font-bold text-slate-800">โหมด Admin และออกรายงาน</h4>
+              <p class="text-[12px] text-slate-500">เรียกดูสรุปภาพรวม สถิติแยกฝ่าย รายงานรายบุคคล และจัดการสิทธิ์ผู้ใช้</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Demo Accounts -->
+        <div class="pt-4 border-t border-slate-200">
+          <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">บัญชีทดสอบด่วน (คลิกเพื่อเข้าสู่ระบบ):</p>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="quickLogin('somchai', 'password123')" class="px-3 py-1.5 bg-white border border-slate-200 hover:border-sky-400 hover:bg-sky-50 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center shadow-sm">
+              <i data-lucide="user" class="w-3.5 h-3.5 mr-1.5 text-sky-600"></i> นายสมชาย (บุคลากรทั่วไป)
+            </button>
+            <button onclick="quickLogin('admin', '123456')" class="px-3 py-1.5 bg-indigo-50 border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100 text-indigo-800 rounded-xl text-xs font-semibold transition flex items-center shadow-sm">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5 mr-1.5 text-indigo-600"></i> ผู้ดูแลระบบ (admin / 123456)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Login & Register Forms -->
+      <div class="md:col-span-7 bg-white rounded-3xl border border-slate-200 shadow-xl p-6 sm:p-8">
+        
+        <!-- Toggle Tabs: Sign In / Sign Up -->
+        <div class="flex p-1 bg-slate-100 rounded-2xl mb-6 border border-slate-200">
+          <button id="authTabLoginBtn" onclick="switchAuthTab('login')" class="w-1/2 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition bg-white text-sky-700 shadow-sm flex items-center justify-center">
+            <i data-lucide="log-in" class="w-4 h-4 mr-1.5"></i> เข้าสู่ระบบ
+          </button>
+          <button id="authTabRegisterBtn" onclick="switchAuthTab('register')" class="w-1/2 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-500 hover:text-slate-800 transition flex items-center justify-center">
+            <i data-lucide="user-plus" class="w-4 h-4 mr-1.5"></i> สมัครสมาชิกใหม่
+          </button>
+        </div>
+
+        <!-- 1. LOGIN FORM -->
+        <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อผู้ใช้งาน (Username) หรือ อีเมล</label>
+            <div class="relative">
+              <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+              <input type="text" id="loginUsername" required placeholder="กรอก Username" class="w-full text-xs sm:text-sm pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="block text-xs font-semibold text-slate-700">รหัสผ่าน</label>
+              <a href="javascript:void(0)" onclick="showToast('บัญชี admin รหัสคือ 123456 | บุคลากรทั่วไปรหัสคือ password123')" class="text-[11px] text-sky-600 hover:underline">ช่วยเหลือเรื่องรหัสผ่าน</a>
+            </div>
+            <div class="relative">
+              <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+              <input type="password" id="loginPassword" required placeholder="กรอก Password" class="w-full text-xs sm:text-sm pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              <button type="button" onclick="togglePasswordVisibility('loginPassword', this)" class="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="w-full py-3 px-4 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-sky-200 transition-all flex items-center justify-center space-x-2">
+            <i data-lucide="log-in" class="w-4 h-4"></i>
+            <span>เข้าสู่ระบบทันที</span>
+          </button>
+        </form>
+
+        <!-- 2. REGISTER FORM -->
+        <form id="registerForm" onsubmit="handleRegisterSubmit(event)" class="space-y-3.5 hidden">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อ - นามสกุล <span class="text-rose-500">*</span></label>
+              <input type="text" id="regFullName" required placeholder="เช่น นายสมเกียรติ รักชาติ" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">ตำแหน่งงาน <span class="text-rose-500">*</span></label>
+              <input type="text" id="regPosition" required placeholder="เช่น เจ้าหน้าที่ธุรการ, นักวิชาการ" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">เบอร์โทรศัพท์ติดต่อ</label>
+              <input type="text" id="regPhone" placeholder="เช่น 081-234-5678" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อผู้ใช้งาน (Username) <span class="text-rose-500">*</span></label>
+              <input type="text" id="regUsername" required placeholder="เช่น somkiat.r" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">รหัสผ่าน <span class="text-rose-500">*</span></label>
+              <input type="password" id="regPassword" required minlength="4" placeholder="อย่างน้อย 4 ตัวอักษร" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">ยืนยันรหัสผ่าน <span class="text-rose-500">*</span></label>
+              <input type="password" id="regConfirmPassword" required minlength="4" placeholder="กรอกรหัสผ่านซ้ำอีกครั้ง" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+          </div>
+
+          <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-800 flex items-center space-x-2">
+            <i data-lucide="shield" class="w-4 h-4 text-sky-600 shrink-0"></i>
+            <span>ผู้สมัครใหม่จะได้รับสิทธิ์ <strong>บุคลากรทั่วไป (Staff)</strong> โดยอัตโนมัติ (Admin สามารถกำหนดสิทธิ์เพิ่มเติมได้ภายหลัง)</span>
+          </div>
+
+          <button type="submit" class="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-emerald-200 transition-all flex items-center justify-center space-x-2 pt-2">
+            <i data-lucide="user-check" class="w-4 h-4"></i>
+            <span>ยืนยันการสมัครและเข้าสู่ระบบทันที</span>
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN APPLICATION SECTION -->
+  <main id="mainAppSection" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex-grow">
+    
+    <!-- User Identity Card -->
+    <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center space-x-3.5">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-sky-200" id="cardAvatar">
+          ส
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h2 class="text-base sm:text-lg font-bold text-slate-900" id="cardFullName">นายสมชาย ใจภักดี</h2>
+            <span id="cardRoleBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800">
+              บุคลากรทั่วไป
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 mt-0.5">
+            <span>สังกัด: <strong class="text-slate-700" id="cardDepartment">ฝ่ายเทคโนโลยีสารสนเทศ</strong></span>
+            <span>•</span>
+            <span>ตำแหน่ง: <strong class="text-slate-700" id="cardPosition">เจ้าหน้าที่</strong></span>
+            <span>•</span>
+            <span>ชื่อผู้ใช้: <strong class="text-slate-700 font-mono" id="cardUsername">somchai</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <button onclick="switchTab('notify')" class="px-3.5 py-2 bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 rounded-xl text-xs font-semibold flex items-center transition">
+          <i data-lucide="plus-circle" class="w-4 h-4 mr-1.5"></i> แจ้งลาใหม่
+        </button>
+      </div>
+    </div>
+
+    <!-- Staff Navigation Tabs -->
+    <div id="staffTabsBar" class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 mb-6 no-print">
+      <div class="flex space-x-1 sm:space-x-2 bg-slate-200/75 p-1 rounded-xl">
+        <button onclick="switchTab('notify')" id="tabBtn-notify" class="tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all shadow-sm bg-white text-sky-700">
+          <i data-lucide="file-plus" class="w-4 h-4 inline mr-1.5"></i>แจ้งการลา
+        </button>
+        <button onclick="switchTab('history')" id="tabBtn-history" class="tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">
+          <i data-lucide="history" class="w-4 h-4 inline mr-1.5"></i>ประวัติการลาของคุณ
+        </button>
+        <button onclick="switchTab('calendar')" id="tabBtn-calendar" class="tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900">
+          <i data-lucide="calendar" class="w-4 h-4 inline mr-1.5"></i>ปฏิทินการลาของเพื่อนร่วมงาน
+        </button>
+      </div>
+
+      <div class="flex items-center text-xs bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-lg border border-emerald-200 font-medium">
+        <i data-lucide="check-circle" class="w-4 h-4 mr-1.5 text-emerald-600 shrink-0"></i>
+        <span>ระบบประเภทเดียว: "การลา" • บันทึกมีผลทันทีไม่ต้องรออนุมัติ</span>
+      </div>
+    </div>
+
+    <!-- Staff Stats Cards -->
+    <div id="staffStatsSection" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 no-print">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-500">วันลาสะสมที่ใช้ไป (ปีงบประมาณ)</p>
+            <h3 class="text-2xl font-bold text-slate-800 mt-1" id="quotaUsedText">0 <span class="text-xs font-normal text-slate-400">วัน</span></h3>
+          </div>
+          <div class="p-2.5 rounded-xl bg-sky-50 text-sky-600">
+            <i data-lucide="calendar" class="w-5 h-5"></i>
+          </div>
+        </div>
+        <div class="mt-3">
+          <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+            <span>สัดส่วนการใช้วันลา</span>
+            <span class="font-bold text-sky-700" id="quotaUsedPercent">0%</span>
+          </div>
+          <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+            <div id="quotaProgressBar" class="bg-sky-600 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-500">วันลาคงเหลือ</p>
+            <h3 class="text-2xl font-bold text-emerald-600 mt-1" id="quotaRemainText">15 <span class="text-xs font-normal text-slate-400">วัน</span></h3>
+          </div>
+          <div class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
+            <i data-lucide="clock" class="w-5 h-5"></i>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+          <span>สิทธิ์ลาประจำปี:</span>
+          <span class="font-semibold text-slate-700" id="quotaTotalText">15 วันทำการ / ปี</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-500">จำนวนครั้งที่บันทึกแจ้งลา</p>
+            <h3 class="text-2xl font-bold text-indigo-600 mt-1" id="quotaRecordsCount">0 <span class="text-xs font-normal text-slate-400">ครั้ง</span></h3>
+          </div>
+          <div class="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
+            <i data-lucide="clipboard-list" class="w-5 h-5"></i>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+          <span>สถานะการบันทึก:</span>
+          <span class="text-emerald-700 font-semibold inline-flex items-center">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> บันทึกอัตโนมัติ
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 1: Notify Leave Form -->
+    <div id="section-notify" class="tab-content">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 sm:p-6">
+          <div class="border-b border-slate-100 pb-4 mb-5 flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">แบบฟอร์มบันทึกการแจ้งลา</h3>
+              <p class="text-xs text-slate-500">กรอกข้อมูลเพื่อบันทึกลงระบบทันที มีผลโดยไม่ต้องรอผู้บังคับบัญชาอนุมัติ</p>
+            </div>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
+              <i data-lucide="tag" class="w-3.5 h-3.5 mr-1"></i> ประเภท: การลา
+            </span>
+          </div>
+
+          <form id="leaveSubmitForm" onsubmit="handleLeaveSubmission(event)" class="space-y-4">
+            <div class="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200/80 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                  <i data-lucide="check" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h4 class="text-xs sm:text-sm font-bold text-sky-950">ประเภทการลามาตรฐานเดียว (Universal Leave)</h4>
+                  <p class="text-[11px] text-sky-700">ไม่ต้องเลือกประเภทแยกย่อย ข้อมูลจะถูกจัดเก็บเข้าสารบรรณและปฏิทินทันที</p>
+                </div>
+              </div>
+              <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                มีผลทันที
+              </span>
+            </div>
+
+            <!-- Date Pickers -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">ตั้งแต่วันที่ <span class="text-rose-500">*</span></label>
+                <input type="date" id="inputStartDate" required onchange="calculateFormDays()" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">ถึงวันที่ <span class="text-rose-500">*</span></label>
+                <input type="date" id="inputEndDate" required onchange="calculateFormDays()" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">ช่วงเวลา</label>
+                <select id="inputPeriod" onchange="calculateFormDays()" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                  <option value="FULL">เต็มวัน (ทั้งวันทำการ)</option>
+                  <option value="MORNING">ครึ่งวันเช้า (08:30 - 12:00)</option>
+                  <option value="AFTERNOON">ครึ่งวันบ่าย (13:00 - 16:30)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Calculated days -->
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <span class="text-xs text-slate-600 flex items-center">
+                <i data-lucide="calculator" class="w-4 h-4 mr-1.5 text-slate-400"></i> จำนวนวันลาที่คำนวณได้:
+              </span>
+              <span class="text-sm font-bold text-sky-700" id="displayCalculatedDays">1 วันทำการ</span>
+            </div>
+
+            <!-- Reason -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">เหตุผลหรือบันทึกรายละเอียดการลา <span class="text-rose-500">*</span></label>
+              <textarea id="inputReason" rows="3" required placeholder="ระบุเหตุผล เช่น ไม่สบายพบแพทย์, พักผ่อนส่วนตัว, หรือ มีธุระจำเป็น" class="w-full text-xs sm:text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+            </div>
+
+            <!-- Substitute & Contact -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">ผู้ปฏิบัติหน้าที่แทน (เพื่อนร่วมงาน)</label>
+                <input type="text" id="inputSubstitute" placeholder="เช่น นายสมเกียรติ รักชาติ" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">เบอร์โทรศัพท์ติดต่อระหว่างลา</label>
+                <input type="text" id="inputContact" placeholder="เช่น 081-xxx-xxxx" class="w-full text-xs sm:text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              </div>
+            </div>
+
+            <button type="submit" class="w-full py-3 px-4 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-sky-200 transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="send" class="w-4 h-4"></i>
+              <span>บันทึกการแจ้งลาทันที</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Sidebar Summary -->
+        <div class="space-y-4">
+          <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-sm">
+            <h3 class="font-bold text-sm mb-2 flex items-center text-sky-400">
+              <i data-lucide="info" class="w-4 h-4 mr-2"></i> แนวทางปฏิบัติการลา
+            </h3>
+            <p class="text-xs text-slate-300 leading-relaxed mb-3">
+              หน่วยงานใช้ระบบการแจ้งลาแบบอิเล็กทรอนิกส์เต็มรูปแบบ ไม่ต้องส่งใบลาแบบกระดาษ
+            </p>
+            <ul class="text-xs text-slate-300 space-y-2 list-disc list-inside">
+              <li>การลามีประเภทเดียวคือ "การลา"</li>
+              <li>บันทึกแล้วมีผลในระบบและปฏิทินทันที</li>
+              <li>สามารถกดพิมพ์ใบแจ้งการลาเพื่อเก็บเป็นหลักฐานได้ทุกเมื่อ</li>
+            </ul>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-bold text-xs uppercase tracking-wider text-slate-500">รายการลาล่าสุดของคุณ</h4>
+              <button onclick="switchTab('history')" class="text-[10px] text-sky-600 font-semibold hover:underline">ดูทั้งหมด</button>
+            </div>
+            <div id="miniRecentContainer" class="space-y-2.5">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: History Tab -->
+    <div id="section-history" class="tab-content hidden">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg">
+            <div class="relative">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+              <input type="text" id="historySearchInput" oninput="renderUserHistoryTable()" placeholder="ค้นหาเหตุผล, รหัสการลา..." class="w-full text-xs pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+            <div class="flex items-center text-xs text-slate-500 bg-white px-3 py-2 rounded-xl border border-slate-200">
+              <span class="mr-1">รายการลาทั้งหมดของคุณ:</span>
+              <strong class="text-sky-700" id="historyCounterBadge">0 รายการ</strong>
+            </div>
+          </div>
+
+          <button onclick="exportCSV(true)" class="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl flex items-center transition shadow-sm self-start md:self-auto">
+            <i data-lucide="download" class="w-4 h-4 mr-1.5 text-slate-600"></i> ส่งออกประวัติ (CSV)
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+                <th class="py-3.5 px-4">รหัส / บันทึกเมื่อ</th>
+                <th class="py-3.5 px-4">ประเภท</th>
+                <th class="py-3.5 px-4">ช่วงวันที่ลา</th>
+                <th class="py-3.5 px-4 text-center">จำนวนวัน</th>
+                <th class="py-3.5 px-4">เหตุผลการลา</th>
+                <th class="py-3.5 px-4">ผู้ปฏิบัติหน้าที่แทน</th>
+                <th class="py-3.5 px-4 text-center">สถานะ</th>
+                <th class="py-3.5 px-4 text-right">ดำเนินการ</th>
+              </tr>
+            </thead>
+            <tbody id="userHistoryTbody" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div id="userHistoryEmpty" class="hidden p-8 text-center">
+          <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+          <p class="text-sm font-medium text-slate-500">ยังไม่พบประวัติการแจ้งลาของคุณ</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 3: Absence Calendar Tab -->
+    <div id="section-calendar" class="tab-content hidden">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+        <div class="flex flex-col sm:flex-row items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-3">
+          <div>
+            <h3 class="text-lg font-bold text-slate-900">ปฏิทินสรุปการลาของเพื่อนร่วมงานในหน่วยงาน</h3>
+            <p class="text-xs text-slate-500">ตรวจสอบว่ามีเพื่อนร่วมงานท่านใดแจ้งลาในแต่ละวันเพื่อการประสานงานที่ราบรื่น</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="changeCalendarMonth(-1)" class="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <span id="calendarMonthHeader" class="text-xs sm:text-sm font-bold text-slate-800 px-2 min-w-[140px] text-center">ตุลาคม 2569</span>
+            <button onclick="changeCalendarMonth(1)" class="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-7 gap-px bg-slate-200 rounded-xl overflow-hidden border border-slate-200" id="calendarGrid">
+          <!-- Calendar Days dynamically created -->
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-sky-600"></span>
+            <span>ป้ายสีฟ้า = มีบุคลากรแจ้งลาในวันดังกล่าว (คลิกเพื่อดูรายละเอียด)</span>
+          </div>
+          <span class="italic text-[11px]">* บันทึกอัตโนมัติแบบเรียลไทม์</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 4: Admin & Executive Reports Tab -->
+    <div id="section-admin" class="tab-content hidden">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mb-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="px-2.5 py-1 rounded-md bg-indigo-100 text-indigo-800 text-xs font-bold uppercase tracking-wider">Admin Portal</span>
+              <h3 class="text-lg font-bold text-slate-900">ศูนย์รายงานสรุปสถิติและภาพรวมการลา</h3>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">เรียกดูสรุปภาพรวมทั้งองค์กร เจาะลึกรายบุคคล หรือจัดการสิทธิ์ผู้ใช้งาน</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="p-1 bg-slate-100 rounded-xl border border-slate-200 flex">
+              <button id="adminTabAllBtn" onclick="switchAdminReportView('all')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition bg-white text-indigo-700 shadow-sm">
+                ภาพรวมทั้งหน่วยงาน
+              </button>
+              <button id="adminTabPersonBtn" onclick="switchAdminReportView('person')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+                รายงานรายบุคคล
+              </button>
+              <button id="adminTabUsersBtn" onclick="switchAdminReportView('users')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition flex items-center">
+                <i data-lucide="users" class="w-3.5 h-3.5 mr-1"></i> จัดการสิทธิ์บุคลากร
+              </button>
+            </div>
+
+            <button onclick="openExecutiveReportModal()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition flex items-center shadow-sm">
+              <i data-lucide="printer" class="w-4 h-4 mr-1.5"></i> พิมพ์รายงานสรุป
+            </button>
+            <button onclick="exportCSV(false)" class="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center shadow-sm">
+              <i data-lucide="download" class="w-4 h-4 mr-1.5 text-slate-600"></i> ส่งออก Excel/CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Admin Filters -->
+        <div class="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">สังกัดฝ่าย/กลุ่มงาน</label>
+            <select id="adminFilterDept" onchange="applyAdminFilters()" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="ALL">ทุกฝ่ายงานในหน่วยงาน</option>
+              <option value="ฝ่ายเทคโนโลยีสารสนเทศ">ฝ่ายเทคโนโลยีสารสนเทศ</option>
+              <option value="ฝ่ายทรัพยากรบุคคล">ฝ่ายทรัพยากรบุคคล</option>
+              <option value="ฝ่ายบริหารทั่วไปและสารบรรณ">ฝ่ายบริหารทั่วไปและสารบรรณ</option>
+              <option value="ฝ่ายการเงินและพัสดุ">ฝ่ายการเงินและพัสดุ</option>
+              <option value="ไม่ระบุฝ่ายงาน (รอจัดสรร)">ไม่ระบุฝ่ายงาน (รอจัดสรร)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">เลือกบุคลากร (เฉพาะรายบุคคล)</label>
+            <select id="adminFilterUserSelect" onchange="applyAdminFilters()" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">ค้นหาคำสำคัญ</label>
+            <input type="text" id="adminSearchInput" oninput="applyAdminFilters()" placeholder="ชื่อ, รหัส, เหตุผล..." class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div class="flex items-end">
+            <button onclick="resetAdminFilters()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold transition">
+              ล้างตัวกรองทั้งหมด
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW A: Organization Overview -->
+      <div id="adminViewAll" class="space-y-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-medium">การแจ้งลาทั้งหมด</p>
+            <h3 class="text-2xl font-bold text-slate-800 mt-1" id="statAllCount">0 ครั้ง</h3>
+            <span class="text-[11px] text-slate-400 mt-1 block">บันทึกอัตโนมัติในระบบ</span>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-medium">จำนวนวันลารวมทั้งสิ้น</p>
+            <h3 class="text-2xl font-bold text-sky-700 mt-1" id="statAllDays">0 วัน</h3>
+            <span class="text-[11px] text-slate-400 mt-1 block">รวมบุคลากรทุกฝ่าย</span>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-medium">ค่าเฉลี่ยวันลาต่อคน</p>
+            <h3 class="text-2xl font-bold text-indigo-700 mt-1" id="statAllAvg">0 วัน</h3>
+            <span class="text-[11px] text-slate-400 mt-1 block" id="statPersonnelCountText">จากบุคลากรทั้งหมด</span>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-medium">บุคลากรที่ลาในวันนี้</p>
+            <h3 class="text-2xl font-bold text-emerald-600 mt-1" id="statTodayCount">0 คน</h3>
+            <span class="text-[11px] text-emerald-600 mt-1 block flex items-center">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> ประจำวันทำการ
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center">
+              <i data-lucide="bar-chart-2" class="w-4 h-4 mr-1.5 text-sky-600"></i> วันลาสะสมเปรียบเทียบตามฝ่ายงาน
+            </h4>
+            <div class="h-64">
+              <canvas id="chartDeptLeaves"></canvas>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center">
+              <i data-lucide="trending-up" class="w-4 h-4 mr-1.5 text-indigo-600"></i> แนวโน้มสถิติการลาประจำเดือน
+            </h4>
+            <div class="h-64">
+              <canvas id="chartMonthlyLeaves"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+            <h4 class="text-sm font-bold text-slate-800">รายการแจ้งลาทั้งหมดในหน่วยงาน</h4>
+            <span class="text-xs font-medium text-slate-500" id="adminTableCountBadge">แสดง 0 รายการ</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-100/80 text-slate-600 font-semibold border-b border-slate-200">
+                  <th class="py-3 px-4">รหัส / วันที่แจ้ง</th>
+                  <th class="py-3 px-4">บุคลากร</th>
+                  <th class="py-3 px-4">ฝ่าย / ตำแหน่ง</th>
+                  <th class="py-3 px-4">ช่วงเวลาลา</th>
+                  <th class="py-3 px-4 text-center">จำนวนวัน</th>
+                  <th class="py-3 px-4">เหตุผลการลา</th>
+                  <th class="py-3 px-4">ผู้ปฏิบัติหน้าที่แทน</th>
+                  <th class="py-3 px-4 text-center">สถานะ</th>
+                  <th class="py-3 px-4 text-right">ใบแจ้งลา</th>
+                </tr>
+              </thead>
+              <tbody id="adminAllTbody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW B: Individual Person Report -->
+      <div id="adminViewPerson" class="space-y-6 hidden">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm" id="personCardSummary">
+          <!-- Populated via JS -->
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+            <h4 class="text-xs font-bold text-slate-700 uppercase" id="personTableTitle">ประวัติการลาเฉพาะบุคคล</h4>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                  <th class="py-3 px-4">รหัสการลา</th>
+                  <th class="py-3 px-4">วันที่บันทึก</th>
+                  <th class="py-3 px-4">ช่วงวันที่ลา</th>
+                  <th class="py-3 px-4 text-center">จำนวนวัน</th>
+                  <th class="py-3 px-4">เหตุผล</th>
+                  <th class="py-3 px-4">ผู้แทน</th>
+                  <th class="py-3 px-4 text-center">สถานะ</th>
+                  <th class="py-3 px-4 text-right">พิมพ์</th>
+                </tr>
+              </thead>
+              <tbody id="personHistoryTbody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW C: User & Role Management -->
+      <div id="adminViewUsers" class="space-y-6 hidden">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h4 class="text-sm font-bold text-slate-900 flex items-center">
+                <i data-lucide="shield-check" class="w-4 h-4 text-indigo-600 mr-2"></i>
+                จัดการสิทธิ์การใช้งานของบุคลากรในระบบ
+              </h4>
+              <p class="text-xs text-slate-500 mt-0.5">กำหนดสิทธิ์ให้บุคลากรเป็นผู้ดูแลระบบ (Admin) เพื่อเข้าถึงรายงานและข้อมูลสรุปทั้งหมดได้</p>
+            </div>
+            <span class="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-xl self-start sm:self-auto" id="adminUsersCountBadge">
+              บุคลากรทั้งหมด 0 คน
+            </span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-100/80 text-slate-600 font-semibold border-b border-slate-200">
+                  <th class="py-3 px-4">รหัส / บัญชี</th>
+                  <th class="py-3 px-4">ชื่อ - นามสกุล</th>
+                  <th class="py-3 px-4">ตำแหน่งงาน</th>
+                  <th class="py-3 px-4">ฝ่าย / สังกัด</th>
+                  <th class="py-3 px-4">เบอร์ติดต่อ</th>
+                  <th class="py-3 px-4 text-center">สิทธิ์ปัจจุบัน</th>
+                  <th class="py-3 px-4 text-right">ปรับเปลี่ยนสิทธิ์</th>
+                </tr>
+              </thead>
+              <tbody id="adminUsersTbody" class="divide-y divide-slate-100 text-slate-700">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL: SUPABASE CONFIGURATION MODAL -->
+  <div id="supabaseConfigModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 p-5 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <h3 class="text-base font-bold text-slate-800 flex items-center">
+          <i data-lucide="database" class="w-5 h-5 text-sky-600 mr-2"></i> ตั้งค่าเชื่อมต่อ Supabase
+        </h3>
+        <button onclick="closeSupabaseConfigModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-600 leading-relaxed">
+        หากต้องการต่อกับฐานข้อมูล Supabase ของจริง ให้นำ <strong>Project URL</strong> และ <strong>Anon Key</strong> จาก Supabase Dashboard มาใส่ที่นี่ (หากเว้นว่างไว้ ระบบจะทำงานในโหมด LocalStorage ในเครื่อง):
+      </p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Project URL</label>
+          <input type="text" id="supabaseUrlInput" placeholder="https://your-project.supabase.co" class="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-sky-500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Anon / Public API Key</label>
+          <input type="password" id="supabaseKeyInput" placeholder="eyJh..." class="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-sky-500">
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-2 pt-2 border-t">
+        <button onclick="clearSupabaseConfig()" class="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition">
+          ใช้โหมด Local เหมือนเดิม
+        </button>
+        <button onclick="saveSupabaseConfig()" class="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition shadow-sm">
+          บันทึกและเชื่อมต่อ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: LEAVE SLIP MODAL -->
+  <div id="printSlipModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 flex flex-col">
+      <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between no-print">
+        <h3 class="text-base font-bold text-slate-800 flex items-center">
+          <i data-lucide="file-text" class="w-5 h-5 text-sky-600 mr-2"></i> ใบแจ้งการลาบุคลากร
+        </h3>
+        <button onclick="closeSlipModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="slipPrintArea" class="printable-zone p-6 space-y-4 text-xs sm:text-sm text-slate-800">
+        <div class="text-center border-b pb-4">
+          <div class="w-12 h-12 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center mx-auto mb-2 font-bold text-slate-700 text-sm">
+            ครุฑ
+          </div>
+          <h2 class="font-bold text-base text-slate-900">ใบแจ้งการลาบุคลากร</h2>
+          <p class="text-xs text-slate-500 mt-0.5">ระบบสารบรรณและบันทึกเวลาปฏิบัติงานออนไลน์</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 py-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <div>
+            <span class="text-slate-400 text-xs block">รหัสอ้างอิงการลา:</span>
+            <span class="font-mono font-bold text-slate-900" id="slipRefCode">-</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-xs block">วันที่บันทึกแจ้ง:</span>
+            <span class="font-semibold text-slate-900" id="slipLoggedDate">-</span>
+          </div>
+        </div>
+
+        <div class="space-y-2.5">
+          <div class="flex justify-between border-b border-slate-100 py-1.5">
+            <span class="text-slate-500">ชื่อ-นามสกุล (ผู้แจ้ง):</span>
+            <span class="font-semibold text-slate-900" id="slipStaffName">-</span>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 py-1.5">
+            <span class="text-slate-500">ตำแหน่ง / ฝ่ายงาน:</span>
+            <span class="font-medium" id="slipStaffPositionDept">-</span>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 py-1.5">
+            <span class="text-slate-500">ประเภทการแจ้ง:</span>
+            <span class="font-bold text-sky-700">การลา (Leave)</span>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 py-1.5">
+            <span class="text-slate-500">ระยะเวลาที่ลา:</span>
+            <span class="font-medium" id="slipDateRange">-</span>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 py-1.5">
+            <span class="text-slate-500">จำนวนวันลา:</span>
+            <span class="font-bold text-slate-900 text-sm" id="slipDays">-</span>
+          </div>
+          <div class="border-b border-slate-100 py-1.5">
+            <span class="text-slate-500 block mb-1">เหตุผลการลา:</span>
+            <p class="font-medium bg-slate-50 p-2.5 rounded-lg text-slate-800" id="slipReason">-</p>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 py-1.5">
+            <span class="text-slate-500">ผู้ปฏิบัติหน้าที่แทน:</span>
+            <span class="font-medium text-slate-800" id="slipSubstitute">-</span>
+          </div>
+          <div class="flex justify-between border-b border-slate-100 py-1.5">
+            <span class="text-slate-500">ช่องทางติดต่อระหว่างลา:</span>
+            <span class="font-medium" id="slipContact">-</span>
+          </div>
+          <div class="flex justify-between py-1.5 items-center">
+            <span class="text-slate-500">สถานะในระบบ:</span>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-100 text-emerald-800">
+              <i data-lucide="check" class="w-3.5 h-3.5 mr-1"></i> บันทึกเรียบร้อย (ไม่ต้องรออนุมัติ)
+            </span>
+          </div>
+        </div>
+
+        <div class="mt-8 pt-4 border-t border-dashed border-slate-300 grid grid-cols-2 gap-4 text-center text-xs">
+          <div>
+            <div class="h-10"></div>
+            <p>( .................................................... )</p>
+            <p class="text-slate-500 mt-1">ผู้แจ้งการลา</p>
+          </div>
+          <div>
+            <div class="h-10"></div>
+            <p>( .................................................... )</p>
+            <p class="text-slate-500 mt-1">เจ้าหน้าที่สารบรรณ / งานบุคคล</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end space-x-2 no-print rounded-b-2xl">
+        <button onclick="window.print()" class="px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-semibold hover:bg-sky-700 transition flex items-center shadow-sm">
+          <i data-lucide="printer" class="w-4 h-4 mr-1.5"></i> พิมพ์ใบแจ้งการลา (PDF)
+        </button>
+        <button onclick="closeSlipModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-300 transition">
+          ปิด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EXECUTIVE REPORT MODAL -->
+  <div id="executiveReportModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 flex flex-col">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between no-print">
+        <h3 class="text-base font-bold text-slate-800 flex items-center">
+          <i data-lucide="file-spreadsheet" class="w-5 h-5 text-indigo-600 mr-2"></i> รายงานสรุปการลาของหน่วยงาน (Executive Report)
+        </h3>
+        <button onclick="closeExecutiveReportModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="executivePrintArea" class="printable-zone p-6 space-y-5 text-xs sm:text-sm text-slate-800">
+        <div class="text-center border-b pb-4">
+          <h2 class="font-bold text-lg text-slate-900">รายงานสรุปสถิติการลาของบุคลากร</h2>
+          <p class="text-xs text-slate-500 mt-1">ประจำปีงบประมาณ 2569 (ข้อมูลระบบสารสนเทศอัตโนมัติ)</p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 text-center p-3 bg-slate-50 rounded-xl border border-slate-200">
+          <div>
+            <span class="text-slate-500 text-xs block">บุคลากรทั้งหมด</span>
+            <span class="font-bold text-base text-slate-800" id="repSummaryStaffCount">-</span>
+          </div>
+          <div>
+            <span class="text-slate-500 text-xs block">การแจ้งลาสะสม</span>
+            <span class="font-bold text-base text-indigo-600" id="repSummaryLeavesCount">-</span>
+          </div>
+          <div>
+            <span class="text-slate-500 text-xs block">วันลารวมทั้งสิ้น</span>
+            <span class="font-bold text-base text-sky-700" id="repSummaryDaysTotal">-</span>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-xs uppercase tracking-wider text-slate-600 mb-2">สรุปสถิติรายบุคคล</h4>
+          <table class="w-full text-left border-collapse border border-slate-200 text-xs">
+            <thead>
+              <tr class="bg-slate-100 font-semibold text-slate-700">
+                <th class="p-2 border border-slate-200 text-center">ลำดับ</th>
+                <th class="p-2 border border-slate-200">ชื่อ-นามสกุล</th>
+                <th class="p-2 border border-slate-200">ฝ่ายงาน</th>
+                <th class="p-2 border border-slate-200">ตำแหน่ง</th>
+                <th class="p-2 border border-slate-200 text-center">จำนวนครั้ง</th>
+                <th class="p-2 border border-slate-200 text-center">รวมวันลา (วัน)</th>
+                <th class="p-2 border border-slate-200 text-center">คงเหลือ (วัน)</th>
+              </tr>
+            </thead>
+            <tbody id="executiveReportTbody">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pt-6 grid grid-cols-2 gap-4 text-center text-xs">
+          <div>
+            <div class="h-12"></div>
+            <p>( .................................................... )</p>
+            <p class="text-slate-600 font-semibold mt-1">ผู้จัดทำรายงานสรุป</p>
+          </div>
+          <div>
+            <div class="h-12"></div>
+            <p>( .................................................... )</p>
+            <p class="text-slate-600 font-semibold mt-1">ผู้อำนวยการ / ผู้บังคับบัญชา</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end space-x-2 no-print rounded-b-2xl">
+        <button onclick="window.print()" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 transition flex items-center shadow-sm">
+          <i data-lucide="printer" class="w-4 h-4 mr-1.5"></i> สั่งพิมพ์รายงาน (PDF)
+        </button>
+        <button onclick="closeExecutiveReportModal()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-300 transition">
+          ปิด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-xs sm:text-sm">
+      <div class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+        <i data-lucide="check" class="w-4 h-4"></i>
+      </div>
+      <span id="toastMessage">แจ้งเตือนสำเร็จ</span>
+    </div>
+  </div>
+
+  <script>
+    // -------------------------------------------------------------
+    // 1. SUPABASE CLIENT & LOCAL STORAGE HYBRID ENGINE
+    // -------------------------------------------------------------
+    let supabaseClient = null;
+
+    // Check if user has saved Supabase credentials in localStorage
+    const savedSbUrl = localStorage.getItem('SB_URL') || '';
+    const savedSbKey = localStorage.getItem('SB_ANON_KEY') || '';
+
+    if (savedSbUrl && savedSbKey && window.supabase) {
+      try {
+        supabaseClient = window.supabase.createClient(savedSbUrl, savedSbKey);
+        updateDbBanner(true);
+      } catch (err) {
+        console.error("Supabase init error:", err);
+        updateDbBanner(false);
+      }
+    } else {
+      updateDbBanner(false);
+    }
+
+    function updateDbBanner(isConnected) {
+      const banner = document.getElementById('dbStatusBanner');
+      const text = document.getElementById('dbStatusText');
+      if (isConnected) {
+        banner.className = "bg-emerald-600 text-white text-[11px] py-1.5 px-4 text-center font-medium flex items-center justify-center space-x-2 no-print";
+        text.innerHTML = "เชื่อมต่อฐานข้อมูล Supabase สำเร็จ (Real-time Cloud Database)";
+      } else {
+        banner.className = "bg-amber-500 text-white text-[11px] py-1.5 px-4 text-center font-medium flex items-center justify-center space-x-2 no-print";
+        text.innerHTML = "โหมดทดสอบในเครื่อง (Local Storage Mode) — ทำงานได้ทันทีโดยไม่ต้องตั้งค่า";
+      }
+    }
+
+    function openSupabaseConfigModal() {
+      document.getElementById('supabaseUrlInput').value = localStorage.getItem('SB_URL') || '';
+      document.getElementById('supabaseKeyInput').value = localStorage.getItem('SB_ANON_KEY') || '';
+      document.getElementById('supabaseConfigModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeSupabaseConfigModal() {
+      document.getElementById('supabaseConfigModal').classList.add('hidden');
+    }
+
+    function saveSupabaseConfig() {
+      const url = document.getElementById('supabaseUrlInput').value.trim();
+      const key = document.getElementById('supabaseKeyInput').value.trim();
+
+      if (!url || !key) {
+        showToast("กรุณากรอกทั้ง Project URL และ Anon Key");
+        return;
+      }
+
+      localStorage.setItem('SB_URL', url);
+      localStorage.setItem('SB_ANON_KEY', key);
+      try {
+        supabaseClient = window.supabase.createClient(url, key);
+        updateDbBanner(true);
+        showToast("เชื่อมต่อ Supabase สำเร็จ! รีเฟรชเพื่อซิงค์ข้อมูล");
+        closeSupabaseConfigModal();
+        loadInitialData();
+      } catch (e) {
+        showToast("ไม่สามารถเชื่อมต่อ Supabase ได้: " + e.message);
+      }
+    }
+
+    function clearSupabaseConfig() {
+      localStorage.removeItem('SB_URL');
+      localStorage.removeItem('SB_ANON_KEY');
+      supabaseClient = null;
+      updateDbBanner(false);
+      closeSupabaseConfigModal();
+      showToast("สลับกลับสู่โหมด LocalStorage เรียบร้อย");
+    }
+
+    // -------------------------------------------------------------
+    // 2. DATA STORAGE (LOCAL MOCK & SEED DATA)
+    // -------------------------------------------------------------
+    const initialUsers = [
+      {
+        id: "USR-001",
+        username: "somchai",
+        password: "password123",
+        fullName: "นายสมชาย ใจภักดี",
+        position: "เจ้าพนักงานธุรการชำนาญงาน",
+        department: "ฝ่ายบริหารทั่วไปและสารบรรณ",
+        phone: "081-222-3344",
+        role: "staff",
+        annualQuota: 15,
+        avatar: "ส"
+      },
+      {
+        id: "USR-002",
+        username: "wannapa",
+        password: "password123",
+        fullName: "นางสาววรรณภา สดใส",
+        position: "นักวิชาการคอมพิวเตอร์",
+        department: "ฝ่ายเทคโนโลยีสารสนเทศ",
+        phone: "089-333-4455",
+        role: "staff",
+        annualQuota: 15,
+        avatar: "ว"
+      },
+      {
+        id: "USR-003",
+        username: "admin",
+        password: "123456",
+        fullName: "ผู้ดูแลระบบ (Admin)",
+        position: "หัวหน้างานบริหาร / ผู้ดูแลระบบ",
+        department: "ฝ่ายบริหารทั่วไปและสารบรรณ",
+        phone: "081-999-8877",
+        role: "admin",
+        annualQuota: 15,
+        avatar: "A"
+      },
+      {
+        id: "USR-004",
+        username: "kanda",
+        password: "password123",
+        fullName: "นางกานดา มณีรัตน์",
+        position: "นักวิชาการเงินและบัญชี",
+        department: "ฝ่ายการเงินและพัสดุ",
+        phone: "086-555-6677",
+        role: "staff",
+        annualQuota: 15,
+        avatar: "ก"
+      }
+    ];
+
+    const initialLeaves = [
+      {
+        id: "LV-202610-001",
+        userId: "USR-001",
+        userName: "นายสมชาย ใจภักดี",
+        userPosition: "เจ้าพนักงานธุรการชำนาญงาน",
+        userDepartment: "ฝ่ายบริหารทั่วไปและสารบรรณ",
+        leaveType: "การลา",
+        startDate: "2026-10-05",
+        endDate: "2026-10-06",
+        period: "FULL",
+        days: 2,
+        reason: "มีธุระจำเป็นเดินทางไปต่างจังหวัดและพักผ่อน",
+        substitute: "นางสาววรรณภา สดใส",
+        contact: "081-222-3344",
+        loggedAt: "2026-10-01 08:30",
+        status: "บันทึกเรียบร้อย"
+      },
+      {
+        id: "LV-202610-002",
+        userId: "USR-002",
+        userName: "นางสาววรรณภา สดใส",
+        userPosition: "นักวิชาการคอมพิวเตอร์",
+        userDepartment: "ฝ่ายเทคโนโลยีสารสนเทศ",
+        leaveType: "การลา",
+        startDate: "2026-10-01",
+        endDate: "2026-10-01",
+        period: "FULL",
+        days: 1,
+        reason: "ป่วยมีไข้ พบแพทย์เพื่อรับการรักษา",
+        substitute: "นายสมชาย ใจภักดี",
+        contact: "089-333-4455",
+        loggedAt: "2026-10-01 07:50",
+        status: "บันทึกเรียบร้อย"
+      }
+    ];
+
+    // Load from LocalStorage if available, otherwise use initial
+    let users = JSON.parse(localStorage.getItem('LOCAL_USERS') || 'null') || [...initialUsers];
+    let leaveRecords = JSON.parse(localStorage.getItem('LOCAL_LEAVES') || 'null') || [...initialLeaves];
+
+    function saveLocalData() {
+      localStorage.setItem('LOCAL_USERS', JSON.stringify(users));
+      localStorage.setItem('LOCAL_LEAVES', JSON.stringify(leaveRecords));
+    }
+
+    let currentUser = null;
+    let currentUserRole = "staff";
+    let adminViewMode = "all";
+
+    let calendarYear = 2026;
+    let calendarMonth = 9; // October
+
+    let deptChart = null;
+    let monthlyChart = null;
+
+    // -------------------------------------------------------------
+    // 3. LIFECYCLE & ASYNC DATA FETCHING
+    // -------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('inputStartDate').value = "2026-10-01";
+      document.getElementById('inputEndDate').value = "2026-10-01";
+      calculateFormDays();
+
+      loadInitialData();
+      quickLogin('somchai', 'password123');
+      lucide.createIcons();
+    });
+
+    async function loadInitialData() {
+      if (supabaseClient) {
+        try {
+          // Fetch profiles
+          const { data: profiles, error: pErr } = await supabaseClient.from('profiles').select('*');
+          if (!pErr && profiles && profiles.length > 0) {
+            users = profiles.map(p => ({
+              id: p.id,
+              username: p.username || p.full_name,
+              fullName: p.full_name,
+              position: p.position,
+              department: p.department,
+              phone: p.phone,
+              role: p.role,
+              annualQuota: p.annual_quota || 15,
+              avatar: p.full_name ? p.full_name.charAt(0) : 'บ'
+            }));
+          }
+
+          // Fetch leaves
+          const { data: leaves, error: lErr } = await supabaseClient.from('leave_records').select('*').order('created_at', { ascending: false });
+          if (!lErr && leaves && leaves.length > 0) {
+            leaveRecords = leaves.map(l => ({
+              id: l.id,
+              userId: l.user_id,
+              userName: l.user_name,
+              userPosition: l.user_position,
+              userDepartment: l.user_department,
+              leaveType: l.leave_type || "การลา",
+              startDate: l.start_date,
+              endDate: l.end_date,
+              period: l.period,
+              days: parseFloat(l.days),
+              reason: l.reason,
+              substitute: l.substitute,
+              contact: l.contact,
+              loggedAt: l.created_at ? l.created_at.substring(0, 16).replace('T', ' ') : '',
+              status: l.status || "บันทึกเรียบร้อย"
+            }));
+          }
+          if (currentUser) {
+            updateStaffStats();
+            renderUserHistoryTable();
+            renderAbsenceCalendar();
+          }
+        } catch (e) {
+          console.warn("Could not sync with Supabase tables:", e);
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 4. AUTHENTICATION (LOGIN & REGISTRATION)
+    // -------------------------------------------------------------
+    function showAuthModal(tab) {
+      handleLogout();
+      switchAuthTab(tab || 'login');
+    }
+
+    function switchAuthTab(tab) {
+      const loginBtn = document.getElementById('authTabLoginBtn');
+      const regBtn = document.getElementById('authTabRegisterBtn');
+      const loginForm = document.getElementById('loginForm');
+      const regForm = document.getElementById('registerForm');
+
+      if (tab === 'login') {
+        loginBtn.classList.add('bg-white', 'text-sky-700', 'shadow-sm');
+        loginBtn.classList.remove('text-slate-500');
+        regBtn.classList.remove('bg-white', 'text-sky-700', 'shadow-sm');
+        regBtn.classList.add('text-slate-500');
+
+        loginForm.classList.remove('hidden');
+        regForm.classList.add('hidden');
+      } else {
+        regBtn.classList.add('bg-white', 'text-sky-700', 'shadow-sm');
+        regBtn.classList.remove('text-slate-500');
+        loginBtn.classList.remove('bg-white', 'text-sky-700', 'shadow-sm');
+        loginBtn.classList.add('text-slate-500');
+
+        regForm.classList.remove('hidden');
+        loginForm.classList.add('hidden');
+      }
+      lucide.createIcons();
+    }
+
+    function togglePasswordVisibility(fieldId, btn) {
+      const input = document.getElementById(fieldId);
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.innerHTML = '<i data-lucide="eye-off" class="w-4 h-4"></i>';
+      } else {
+        input.type = 'password';
+        btn.innerHTML = '<i data-lucide="eye" class="w-4 h-4"></i>';
+      }
+      lucide.createIcons();
+    }
+
+    function handleLoginSubmit(e) {
+      e.preventDefault();
+      const usernameInput = document.getElementById('loginUsername').value.trim().toLowerCase();
+      const passwordInput = document.getElementById('loginPassword').value.trim();
+
+      const user = users.find(u => u.username.toLowerCase() === usernameInput);
+
+      if (!user) {
+        showToast("ไม่พบชื่อผู้ใช้งานนี้ในระบบ กรุณาตรวจสอบหรือสมัครสมาชิกใหม่");
+        return;
+      }
+
+      if (user.password !== passwordInput) {
+        showToast("รหัสผ่านไม่ถูกต้อง (สำหรับ admin ใช้ 123456)");
+        return;
+      }
+
+      loginUser(user);
+    }
+
+    async function handleRegisterSubmit(e) {
+      e.preventDefault();
+      const fullName = document.getElementById('regFullName').value.trim();
+      const position = document.getElementById('regPosition').value.trim();
+      const phone = document.getElementById('regPhone').value.trim() || '-';
+      const username = document.getElementById('regUsername').value.trim().toLowerCase();
+      const password = document.getElementById('regPassword').value;
+      const confirmPassword = document.getElementById('regConfirmPassword').value;
+
+      if (password !== confirmPassword) {
+        showToast("รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน");
+        return;
+      }
+
+      if (users.some(u => u.username.toLowerCase() === username)) {
+        showToast("ชื่อผู้ใช้งานนี้ถูกใช้งานแล้ว กรุณาเลือกชื่อผู้ใช้อื่น");
+        return;
+      }
+
+      const avatarLetter = fullName.charAt(0) || "บ";
+      const newUserId = `USR-${String(users.length + 1).padStart(3, '0')}`;
+      const newUser = {
+        id: newUserId,
+        username: username,
+        password: password,
+        fullName: fullName,
+        position: position,
+        department: "ไม่ระบุฝ่ายงาน (รอจัดสรร)",
+        phone: phone,
+        role: "staff",
+        annualQuota: 15,
+        avatar: avatarLetter
+      };
+
+      users.push(newUser);
+      saveLocalData();
+
+      // If connected to Supabase, sync profile
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('profiles').insert([{
+            id: newUserId,
+            username: username,
+            full_name: fullName,
+            position: position,
+            department: "ไม่ระบุฝ่ายงาน (รอจัดสรร)",
+            phone: phone,
+            role: "staff",
+            annual_quota: 15
+          }]);
+        } catch (err) {
+          console.warn("Could not insert to Supabase:", err);
+        }
+      }
+
+      document.getElementById('registerForm').reset();
+      showToast(`สมัครสมาชิกสำเร็จ! ยินดีต้อนรับ ${fullName} (สิทธิ์: บุคลากรทั่วไป)`);
+      loginUser(newUser);
+    }
+
+    function quickLogin(username, password) {
+      const user = users.find(u => u.username === username);
+      if (user) {
+        loginUser(user);
+      }
+    }
+
+    function loginUser(user) {
+      currentUser = user;
+
+      document.getElementById('headerGuestNav').classList.add('hidden');
+      document.getElementById('headerAuthNav').classList.remove('hidden');
+      document.getElementById('navAvatar').innerText = currentUser.avatar;
+      document.getElementById('navFullName').innerText = currentUser.fullName;
+      document.getElementById('navDepartment').innerText = currentUser.department;
+
+      document.getElementById('cardAvatar').innerText = currentUser.avatar;
+      document.getElementById('cardFullName').innerText = currentUser.fullName;
+      document.getElementById('cardDepartment').innerText = currentUser.department;
+      document.getElementById('cardPosition').innerText = currentUser.position;
+      document.getElementById('cardUsername').innerText = currentUser.username;
+
+      const badge = document.getElementById('cardRoleBadge');
+      if (currentUser.role === 'admin') {
+        badge.innerText = 'ผู้ดูแลระบบ (Admin)';
+        badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-800';
+        document.getElementById('adminToggleContainer').classList.remove('hidden');
+      } else {
+        badge.innerText = 'บุคลากรทั่วไป';
+        badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800';
+        document.getElementById('adminToggleContainer').classList.add('hidden');
+      }
+
+      document.getElementById('authGatewaySection').classList.add('hidden');
+      document.getElementById('mainAppSection').classList.remove('hidden');
+
+      populateAdminUserSelect();
+      switchUserRole('staff');
+      updateStaffStats();
+      renderUserHistoryTable();
+      renderAbsenceCalendar();
+
+      showToast(`เข้าสู่ระบบสำเร็จ: ${currentUser.fullName}`);
+      lucide.createIcons();
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      document.getElementById('headerAuthNav').classList.add('hidden');
+      document.getElementById('headerGuestNav').classList.remove('hidden');
+      document.getElementById('mainAppSection').classList.add('hidden');
+      document.getElementById('authGatewaySection').classList.remove('hidden');
+      switchAuthTab('login');
+      showToast("ออกจากระบบเรียบร้อยแล้ว");
+      lucide.createIcons();
+    }
+
+    function goToHome() {
+      if (currentUser) {
+        switchUserRole('staff');
+        switchTab('notify');
+      } else {
+        switchAuthTab('login');
+      }
+    }
+
+    function switchUserRole(role) {
+      currentUserRole = role;
+      const staffBtn = document.getElementById('roleStaffBtn');
+      const adminBtn = document.getElementById('roleAdminBtn');
+      const staffTabsBar = document.getElementById('staffTabsBar');
+      const staffStatsSection = document.getElementById('staffStatsSection');
+
+      if (role === 'staff') {
+        staffBtn.classList.add('bg-white', 'text-sky-700', 'shadow-sm');
+        staffBtn.classList.remove('text-slate-600');
+        adminBtn.classList.remove('bg-white', 'text-indigo-700', 'shadow-sm');
+        adminBtn.classList.add('text-slate-600');
+
+        staffTabsBar.classList.remove('hidden');
+        staffStatsSection.classList.remove('hidden');
+        document.getElementById('section-admin').classList.add('hidden');
+
+        switchTab('notify');
+      } else {
+        adminBtn.classList.add('bg-white', 'text-indigo-700', 'shadow-sm');
+        adminBtn.classList.remove('text-slate-600');
+        staffBtn.classList.remove('bg-white', 'text-sky-700', 'shadow-sm');
+        staffBtn.classList.add('text-slate-600');
+
+        staffTabsBar.classList.add('hidden');
+        staffStatsSection.classList.add('hidden');
+
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.getElementById('section-admin').classList.remove('hidden');
+
+        initAdminSection();
+      }
+      lucide.createIcons();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-white', 'text-sky-700', 'shadow-sm');
+        btn.classList.add('text-slate-600');
+      });
+
+      const targetSection = document.getElementById(`section-${tabId}`);
+      if (targetSection) targetSection.classList.remove('hidden');
+      const activeBtn = document.getElementById(`tabBtn-${tabId}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-white', 'text-sky-700', 'shadow-sm');
+        activeBtn.classList.remove('text-slate-600');
+      }
+
+      if (tabId === 'calendar') renderAbsenceCalendar();
+      lucide.createIcons();
+    }
+
+    // -------------------------------------------------------------
+    // 5. LEAVE NOTIFICATION & HISTORY
+    // -------------------------------------------------------------
+    function calculateFormDays() {
+      const startVal = document.getElementById('inputStartDate').value;
+      const endVal = document.getElementById('inputEndDate').value;
+      const period = document.getElementById('inputPeriod').value;
+
+      if (!startVal || !endVal) return 0;
+
+      const start = new Date(startVal);
+      const end = new Date(endVal);
+
+      if (end < start) {
+        document.getElementById('inputEndDate').value = startVal;
+        showToast("วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น");
+        return 1;
+      }
+
+      const diffTime = Math.abs(end - start);
+      let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+      if (period === 'MORNING' || period === 'AFTERNOON') {
+        diffDays = diffDays === 1 ? 0.5 : diffDays - 0.5;
+      }
+
+      document.getElementById('displayCalculatedDays').innerText = `${diffDays} วันทำการ`;
+      return diffDays;
+    }
+
+    async function handleLeaveSubmission(e) {
+      e.preventDefault();
+      if (!currentUser) return;
+
+      const startDate = document.getElementById('inputStartDate').value;
+      const endDate = document.getElementById('inputEndDate').value;
+      const period = document.getElementById('inputPeriod').value;
+      const reason = document.getElementById('inputReason').value.trim();
+      const substitute = document.getElementById('inputSubstitute').value.trim() || 'ไม่ได้ระบุ';
+      const contact = document.getElementById('inputContact').value.trim() || currentUser.phone || 'ไม่ได้ระบุ';
+      const days = calculateFormDays();
+
+      const newId = `LV-${calendarYear}${String(calendarMonth + 1).padStart(2, '0')}-${String(leaveRecords.length + 1).padStart(3, '0')}`;
+      const now = new Date();
+      const loggedAt = `2026-10-01 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      const newRecord = {
+        id: newId,
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        userPosition: currentUser.position,
+        userDepartment: currentUser.department,
+        leaveType: "การลา",
+        startDate: startDate,
+        endDate: endDate,
+        period: period,
+        days: days,
+        reason: reason,
+        substitute: substitute,
+        contact: contact,
+        loggedAt: loggedAt,
+        status: "บันทึกเรียบร้อย"
+      };
+
+      leaveRecords.unshift(newRecord);
+      saveLocalData();
+
+      // Sync to Supabase if available
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('leave_records').insert([{
+            id: newId,
+            user_id: currentUser.id,
+            user_name: currentUser.fullName,
+            user_position: currentUser.position,
+            user_department: currentUser.department,
+            leave_type: "การลา",
+            start_date: startDate,
+            end_date: endDate,
+            period: period,
+            days: days,
+            reason: reason,
+            substitute: substitute,
+            contact: contact,
+            status: "บันทึกเรียบร้อย"
+          }]);
+        } catch (err) {
+          console.warn("Could not insert leave to Supabase:", err);
+        }
+      }
+
+      document.getElementById('leaveSubmitForm').reset();
+      document.getElementById('inputStartDate').value = "2026-10-01";
+      document.getElementById('inputEndDate').value = "2026-10-01";
+      calculateFormDays();
+
+      updateStaffStats();
+      renderUserHistoryTable();
+      renderAbsenceCalendar();
+
+      showToast(`บันทึกการแจ้งลาสำเร็จ! รหัส ${newId}`);
+      viewLeaveSlip(newId);
+    }
+
+    function updateStaffStats() {
+      if (!currentUser) return;
+
+      const userRecords = leaveRecords.filter(r => r.userId === currentUser.id);
+      const totalUsed = userRecords.reduce((sum, r) => sum + r.days, 0);
+      const remaining = Math.max(0, currentUser.annualQuota - totalUsed);
+      const percentage = Math.min(100, Math.round((totalUsed / currentUser.annualQuota) * 100));
+
+      document.getElementById('quotaUsedText').innerHTML = `${totalUsed} <span class="text-xs font-normal text-slate-400">/ ${currentUser.annualQuota} วัน</span>`;
+      document.getElementById('quotaRemainText').innerHTML = `${remaining} <span class="text-xs font-normal text-slate-400">วัน</span>`;
+      document.getElementById('quotaTotalText').innerText = `${currentUser.annualQuota} วันทำการ / ปี`;
+      document.getElementById('quotaUsedPercent').innerText = `${percentage}%`;
+      document.getElementById('quotaProgressBar').style.width = `${percentage}%`;
+      document.getElementById('quotaRecordsCount').innerHTML = `${userRecords.length} <span class="text-xs font-normal text-slate-400">ครั้ง</span>`;
+
+      const miniContainer = document.getElementById('miniRecentContainer');
+      if (userRecords.length === 0) {
+        miniContainer.innerHTML = '<p class="text-xs text-slate-400 py-2">ยังไม่มีประวัติการแจ้งลา</p>';
+      } else {
+        const recents = userRecords.slice(0, 3);
+        miniContainer.innerHTML = recents.map(r => `
+          <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+            <div>
+              <div class="flex items-center space-x-1.5">
+                <span class="font-semibold text-xs text-slate-800">การลา (${r.days} วัน)</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">บันทึกแล้ว</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">${formatDateThai(r.startDate)}</p>
+            </div>
+            <button onclick="viewLeaveSlip('${r.id}')" class="text-sky-600 hover:text-sky-800 text-xs font-semibold">ดูใบลา</button>
+          </div>
+        `).join('');
+      }
+      lucide.createIcons();
+    }
+
+    function renderUserHistoryTable() {
+      if (!currentUser) return;
+      const search = document.getElementById('historySearchInput').value.toLowerCase().trim();
+      const userRecords = leaveRecords.filter(r => r.userId === currentUser.id);
+
+      const filtered = userRecords.filter(r => {
+        return r.reason.toLowerCase().includes(search) || 
+               r.id.toLowerCase().includes(search) ||
+               (r.substitute && r.substitute.toLowerCase().includes(search));
+      });
+
+      const tbody = document.getElementById('userHistoryTbody');
+      const emptyState = document.getElementById('userHistoryEmpty');
+      document.getElementById('historyCounterBadge').innerText = `${filtered.length} รายการ`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      tbody.innerHTML = filtered.map(item => {
+        const range = item.startDate === item.endDate
+          ? formatDateThai(item.startDate)
+          : `${formatDateThai(item.startDate)} - ${formatDateThai(item.endDate)}`;
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition-colors">
+            <td class="py-3 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+              ${item.id}
+              <div class="text-[10px] text-slate-400">${item.loggedAt}</div>
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                การลา
+              </span>
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="font-medium text-slate-800">${range}</span>
+              <div class="text-[11px] text-slate-400">${item.period === 'FULL' ? 'เต็มวัน' : item.period === 'MORNING' ? 'ครึ่งวันเช้า' : 'ครึ่งวันบ่าย'}</div>
+            </td>
+            <td class="py-3 px-4 text-center font-bold text-slate-800 whitespace-nowrap">
+              ${item.days} วัน
+            </td>
+            <td class="py-3 px-4 max-w-xs truncate" title="${item.reason}">
+              ${item.reason}
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap text-slate-600">
+              ${item.substitute || '-'}
+            </td>
+            <td class="py-3 px-4 text-center whitespace-nowrap">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> บันทึกแล้ว
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right whitespace-nowrap space-x-1">
+              <button onclick="viewLeaveSlip('${item.id}')" class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 transition" title="ดูใบลาและพิมพ์">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+              </button>
+              <button onclick="cancelLeaveRecord('${item.id}')" class="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition" title="ยกเลิกรายการลา">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    async function cancelLeaveRecord(recordId) {
+      const idx = leaveRecords.findIndex(r => r.id === recordId);
+      if (idx !== -1) {
+        leaveRecords.splice(idx, 1);
+        saveLocalData();
+
+        if (supabaseClient) {
+          try {
+            await supabaseClient.from('leave_records').delete().eq('id', recordId);
+          } catch (e) {
+            console.warn("Could not delete from Supabase:", e);
+          }
+        }
+
+        updateStaffStats();
+        renderUserHistoryTable();
+        renderAbsenceCalendar();
+        showToast("ยกเลิกรายการแจ้งลาเรียบร้อยแล้ว");
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 6. ABSENCE CALENDAR
+    // -------------------------------------------------------------
+    function changeCalendarMonth(delta) {
+      calendarMonth += delta;
+      if (calendarMonth > 11) {
+        calendarMonth = 0;
+        calendarYear++;
+      } else if (calendarMonth < 0) {
+        calendarMonth = 11;
+        calendarYear--;
+      }
+      renderAbsenceCalendar();
+    }
+
+    function renderAbsenceCalendar() {
+      const monthNames = [
+        "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+        "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+      ];
+      const thaiYear = calendarYear + 543;
+      document.getElementById('calendarMonthHeader').innerText = `${monthNames[calendarMonth]} ${thaiYear}`;
+
+      const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
+      const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+      const daysOfWeek = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+      
+      let html = '';
+      daysOfWeek.forEach(d => {
+        html += `<div class="bg-slate-100 py-2 text-center text-xs font-bold text-slate-600">${d}</div>`;
+      });
+
+      for (let i = 0; i < firstDay; i++) {
+        html += `<div class="bg-slate-50/50 min-h-[90px] p-1.5 opacity-40"></div>`;
+      }
+
+      for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayLeaves = leaveRecords.filter(r => dateStr >= r.startDate && dateStr <= r.endDate);
+        const isToday = (calendarYear === 2026 && calendarMonth === 9 && day === 1);
+
+        html += `
+          <div class="bg-white min-h-[95px] p-1.5 flex flex-col justify-between transition-colors hover:bg-slate-50/80">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold ${isToday ? 'w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center shadow' : 'text-slate-700'}">${day}</span>
+              ${dayLeaves.length > 0 ? `<span class="text-[10px] text-sky-700 font-semibold">${dayLeaves.length} คนลา</span>` : ''}
+            </div>
+            <div class="space-y-1 overflow-y-auto max-h-[60px]">
+              ${dayLeaves.map(dl => `
+                <div onclick="viewLeaveSlip('${dl.id}')" class="cursor-pointer text-[10px] px-1.5 py-0.5 rounded border bg-sky-50 text-sky-900 border-sky-200 truncate font-medium" title="${dl.userName} (${dl.userDepartment})">
+                  ${dl.userName.replace('นาย', '').replace('นางสาว', '').replace('นาง', '')} (ลา)
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      document.getElementById('calendarGrid').innerHTML = html;
+      lucide.createIcons();
+    }
+
+    // -------------------------------------------------------------
+    // 7. ADMIN PORTAL & REPORTS
+    // -------------------------------------------------------------
+    function populateAdminUserSelect() {
+      const select = document.getElementById('adminFilterUserSelect');
+      if (!select) return;
+      select.innerHTML = '<option value="ALL">-- แสดงบุคลากรทุกคน --</option>' + 
+        users.map(u => `<option value="${u.id}">${u.fullName} (${u.department})</option>`).join('');
+    }
+
+    function initAdminSection() {
+      updateAdminStatsCards();
+      renderDepartmentChart();
+      renderMonthlyTrendChart();
+      applyAdminFilters();
+    }
+
+    function switchAdminReportView(mode) {
+      adminViewMode = mode;
+      const allBtn = document.getElementById('adminTabAllBtn');
+      const personBtn = document.getElementById('adminTabPersonBtn');
+      const usersBtn = document.getElementById('adminTabUsersBtn');
+      const viewAll = document.getElementById('adminViewAll');
+      const viewPerson = document.getElementById('adminViewPerson');
+      const viewUsers = document.getElementById('adminViewUsers');
+
+      [allBtn, personBtn, usersBtn].forEach(b => {
+        if (b) {
+          b.classList.remove('bg-white', 'text-indigo-700', 'shadow-sm');
+          b.classList.add('text-slate-600');
+        }
+      });
+
+      [viewAll, viewPerson, viewUsers].forEach(v => {
+        if (v) v.classList.add('hidden');
+      });
+
+      if (mode === 'all') {
+        if (allBtn) {
+          allBtn.classList.add('bg-white', 'text-indigo-700', 'shadow-sm');
+          allBtn.classList.remove('text-slate-600');
+        }
+        if (viewAll) viewAll.classList.remove('hidden');
+      } else if (mode === 'person') {
+        if (personBtn) {
+          personBtn.classList.add('bg-white', 'text-indigo-700', 'shadow-sm');
+          personBtn.classList.remove('text-slate-600');
+        }
+        if (viewPerson) viewPerson.classList.remove('hidden');
+        renderIndividualPersonReport();
+      } else if (mode === 'users') {
+        if (usersBtn) {
+          usersBtn.classList.add('bg-white', 'text-indigo-700', 'shadow-sm');
+          usersBtn.classList.remove('text-slate-600');
+        }
+        if (viewUsers) viewUsers.classList.remove('hidden');
+        renderAdminUsersManagement();
+      }
+      applyAdminFilters();
+      lucide.createIcons();
+    }
+
+    function renderAdminUsersManagement() {
+      document.getElementById('adminUsersCountBadge').innerText = `บุคลากรทั้งหมด ${users.length} คน`;
+      const tbody = document.getElementById('adminUsersTbody');
+      
+      tbody.innerHTML = users.map(u => {
+        const isAdmin = u.role === 'admin';
+        const isCurrentActive = currentUser && currentUser.id === u.id;
+
+        return `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-3 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+              ${u.id}
+              <div class="text-[10px] text-slate-400 font-normal">@${u.username}</div>
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap font-medium text-slate-800">
+              ${u.fullName}
+              ${isCurrentActive ? '<span class="ml-1 text-[10px] text-sky-600 font-normal">(คุณ)</span>' : ''}
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap text-slate-600">${u.position}</td>
+            <td class="py-3 px-4 whitespace-nowrap text-slate-600">${u.department}</td>
+            <td class="py-3 px-4 whitespace-nowrap text-slate-600">${u.phone || '-'}</td>
+            <td class="py-3 px-4 text-center whitespace-nowrap">
+              ${isAdmin 
+                ? '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">ผู้ดูแลระบบ (Admin)</span>' 
+                : '<span class="px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">บุคลากรทั่วไป (Staff)</span>'
+              }
+            </td>
+            <td class="py-3 px-4 text-right whitespace-nowrap">
+              <button onclick="toggleUserRole('${u.id}')" ${isCurrentActive ? 'disabled title="ไม่สามารถเปลี่ยนสิทธิ์ของตนเองได้"' : ''} class="px-3 py-1.5 rounded-lg text-xs font-semibold transition ${isCurrentActive ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400' : isAdmin ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'}">
+                ${isAdmin ? 'ยกเลิกสิทธิ์ Admin' : 'แต่งตั้งเป็น Admin'}
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    async function toggleUserRole(userId) {
+      const target = users.find(u => u.id === userId);
+      if (!target) return;
+
+      if (target.role === 'admin') {
+        target.role = 'staff';
+        showToast(`ยกเลิกสิทธิ์ Admin ของ ${target.fullName} เรียบร้อยแล้ว`);
+      } else {
+        target.role = 'admin';
+        showToast(`แต่งตั้ง ${target.fullName} เป็นผู้ดูแลระบบ (Admin) เรียบร้อยแล้ว`);
+      }
+
+      saveLocalData();
+
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('profiles').update({ role: target.role }).eq('id', target.id);
+        } catch (e) {
+          console.warn("Could not update role in Supabase:", e);
+        }
+      }
+
+      renderAdminUsersManagement();
+      populateAdminUserSelect();
+    }
+
+    function updateAdminStatsCards() {
+      const totalLeaves = leaveRecords.length;
+      const totalDays = leaveRecords.reduce((sum, r) => sum + r.days, 0);
+      const avgDays = (totalDays / (users.length || 1)).toFixed(1);
+      
+      const todayDate = "2026-10-01";
+      const todayAway = leaveRecords.filter(r => todayDate >= r.startDate && todayDate <= r.endDate).length;
+
+      document.getElementById('statAllCount').innerText = `${totalLeaves} ครั้ง`;
+      document.getElementById('statAllDays').innerText = `${totalDays} วัน`;
+      document.getElementById('statAllAvg').innerText = `${avgDays} วัน`;
+      document.getElementById('statPersonnelCountText').innerText = `จากบุคลากรทั้งหมด ${users.length} ท่าน`;
+      document.getElementById('statTodayCount').innerText = `${todayAway} คน`;
+    }
+
+    function renderDepartmentChart() {
+      const ctx = document.getElementById('chartDeptLeaves');
+      if (!ctx) return;
+
+      const deptMap = {};
+      users.forEach(u => { deptMap[u.department] = 0; });
+      leaveRecords.forEach(r => {
+        if (deptMap[r.userDepartment] !== undefined) {
+          deptMap[r.userDepartment] += r.days;
+        } else {
+          deptMap[r.userDepartment] = r.days;
+        }
+      });
+
+      const labels = Object.keys(deptMap);
+      const data = Object.values(deptMap);
+
+      if (deptChart) deptChart.destroy();
+
+      deptChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'จำนวนวันลารวม (วัน)',
+            data: data,
+            backgroundColor: '#0284c7',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1 } }
+          }
+        }
+      });
+    }
+
+    function renderMonthlyTrendChart() {
+      const ctx = document.getElementById('chartMonthlyLeaves');
+      if (!ctx) return;
+
+      const months = ['ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.'];
+      const counts = [0, 0, 2, 2];
+
+      if (monthlyChart) monthlyChart.destroy();
+
+      monthlyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: months,
+          datasets: [{
+            label: 'จำนวนครั้งที่แจ้งลา',
+            data: counts,
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            tension: 0.35,
+            fill: true,
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1 } }
+          }
+        }
+      });
+    }
+
+    function applyAdminFilters() {
+      const deptFilter = document.getElementById('adminFilterDept').value;
+      const userFilter = document.getElementById('adminFilterUserSelect').value;
+      const search = document.getElementById('adminSearchInput').value.toLowerCase().trim();
+
+      const filtered = leaveRecords.filter(r => {
+        const matchDept = deptFilter === 'ALL' || r.userDepartment === deptFilter;
+        const matchUser = userFilter === 'ALL' || r.userId === userFilter;
+        const matchSearch = r.userName.toLowerCase().includes(search) ||
+                            r.reason.toLowerCase().includes(search) ||
+                            r.id.toLowerCase().includes(search) ||
+                            (r.substitute && r.substitute.toLowerCase().includes(search));
+        return matchDept && matchUser && matchSearch;
+      });
+
+      document.getElementById('adminTableCountBadge').innerText = `แสดง ${filtered.length} จาก ${leaveRecords.length} รายการ`;
+      const tbody = document.getElementById('adminAllTbody');
+      tbody.innerHTML = filtered.map(item => `
+        <tr class="hover:bg-slate-50/80 transition-colors">
+          <td class="py-3 px-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+            ${item.id}
+            <div class="text-[10px] text-slate-400">${item.loggedAt}</div>
+          </td>
+          <td class="py-3 px-4 whitespace-nowrap">
+            <span class="font-semibold text-slate-800 block">${item.userName}</span>
+            <span class="text-[10px] text-slate-400">${item.userId}</span>
+          </td>
+          <td class="py-3 px-4 whitespace-nowrap">
+            <span class="text-slate-800 font-medium block">${item.userDepartment}</span>
+            <span class="text-[11px] text-slate-500">${item.userPosition}</span>
+          </td>
+          <td class="py-3 px-4 whitespace-nowrap">
+            ${formatDateThai(item.startDate)} - ${formatDateThai(item.endDate)}
+            <div class="text-[10px] text-slate-400">${item.period === 'FULL' ? 'เต็มวัน' : 'ครึ่งวัน'}</div>
+          </td>
+          <td class="py-3 px-4 text-center font-bold text-slate-900 whitespace-nowrap">${item.days} วัน</td>
+          <td class="py-3 px-4 max-w-xs truncate" title="${item.reason}">${item.reason}</td>
+          <td class="py-3 px-4 whitespace-nowrap text-slate-600">${item.substitute || '-'}</td>
+          <td class="py-3 px-4 text-center whitespace-nowrap">
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              บันทึกแล้ว
+            </span>
+          </td>
+          <td class="py-3 px-4 text-right whitespace-nowrap">
+            <button onclick="viewLeaveSlip('${item.id}')" class="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition" title="ดูใบลา">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      if (adminViewMode === 'person') {
+        renderIndividualPersonReport();
+      }
+      lucide.createIcons();
+    }
+
+    function renderIndividualPersonReport() {
+      const selectedUserId = document.getElementById('adminFilterUserSelect').value;
+      const targetUserId = selectedUserId === 'ALL' ? (users[0] ? users[0].id : '') : selectedUserId;
+      const targetUser = users.find(u => u.id === targetUserId);
+
+      if (!targetUser) return;
+
+      const userRecords = leaveRecords.filter(r => r.userId === targetUser.id);
+      const totalDays = userRecords.reduce((sum, r) => sum + r.days, 0);
+      const remainDays = Math.max(0, targetUser.annualQuota - totalDays);
+
+      document.getElementById('personTableTitle').innerText = `ประวัติการลาเฉพาะบุคคล: ${targetUser.fullName} (${targetUser.department})`;
+
+      document.getElementById('personCardSummary').innerHTML = `
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div class="flex items-center space-x-3">
+            <div class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg">
+              ${targetUser.avatar}
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-900">${targetUser.fullName}</h3>
+              <p class="text-xs text-slate-500">${targetUser.position} • ${targetUser.department}</p>
+              <p class="text-[11px] text-slate-400 font-mono">รหัสผู้ใช้: ${targetUser.id} | เบอร์โทร: ${targetUser.phone || '-'}</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-4 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+            <div>
+              <span class="text-slate-400 block">สิทธิ์ทั้งปี</span>
+              <span class="font-bold text-slate-800">${targetUser.annualQuota} วัน</span>
+            </div>
+            <div class="border-l border-slate-200 pl-4">
+              <span class="text-slate-400 block">ลาสะสมแล้ว</span>
+              <span class="font-bold text-indigo-700">${totalDays} วัน (${userRecords.length} ครั้ง)</span>
+            </div>
+            <div class="border-l border-slate-200 pl-4">
+              <span class="text-slate-400 block">วันลาคงเหลือ</span>
+              <span class="font-bold text-emerald-600">${remainDays} วัน</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const tbody = document.getElementById('personHistoryTbody');
+      if (userRecords.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-400 text-xs">ไม่พบประวัติการแจ้งลาของบุคลากรท่านนี้</td></tr>`;
+      } else {
+        tbody.innerHTML = userRecords.map(item => `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-3 px-4 font-mono text-[11px] text-slate-500">${item.id}</td>
+            <td class="py-3 px-4 whitespace-nowrap">${item.loggedAt}</td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              ${formatDateThai(item.startDate)} - ${formatDateThai(item.endDate)}
+              <span class="text-slate-400 text-[10px]">(${item.period === 'FULL' ? 'เต็มวัน' : 'ครึ่งวัน'})</span>
+            </td>
+            <td class="py-3 px-4 text-center font-bold text-slate-900">${item.days} วัน</td>
+            <td class="py-3 px-4 max-w-xs truncate" title="${item.reason}">${item.reason}</td>
+            <td class="py-3 px-4 text-slate-600">${item.substitute || '-'}</td>
+            <td class="py-3 px-4 text-center">
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                บันทึกแล้ว
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right">
+              <button onclick="viewLeaveSlip('${item.id}')" class="p-1 rounded text-sky-600 hover:bg-sky-50">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+      lucide.createIcons();
+    }
+
+    function resetAdminFilters() {
+      document.getElementById('adminFilterDept').value = "ALL";
+      document.getElementById('adminFilterUserSelect').value = "ALL";
+      document.getElementById('adminSearchInput').value = "";
+      applyAdminFilters();
+    }
+
+    // -------------------------------------------------------------
+    // 8. PRINT & EXPORT TOOLS
+    // -------------------------------------------------------------
+    function viewLeaveSlip(recordId) {
+      const record = leaveRecords.find(r => r.id === recordId);
+      if (!record) return;
+
+      document.getElementById('slipRefCode').innerText = record.id;
+      document.getElementById('slipLoggedDate').innerText = record.loggedAt;
+      document.getElementById('slipStaffName').innerText = record.userName;
+      document.getElementById('slipStaffPositionDept').innerText = `${record.userPosition} (${record.userDepartment})`;
+      
+      const periodLabel = record.period === 'FULL' ? 'เต็มวัน' : record.period === 'MORNING' ? 'ครึ่งวันเช้า' : 'ครึ่งวันบ่าย';
+      document.getElementById('slipDateRange').innerText = `${formatDateThai(record.startDate)} ถึง ${formatDateThai(record.endDate)} (${periodLabel})`;
+      document.getElementById('slipDays').innerText = `${record.days} วันทำการ`;
+      document.getElementById('slipReason').innerText = record.reason;
+      document.getElementById('slipSubstitute').innerText = record.substitute || 'ไม่ได้ระบุ';
+      document.getElementById('slipContact').innerText = record.contact || 'ไม่ได้ระบุ';
+
+      document.getElementById('printSlipModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeSlipModal() {
+      document.getElementById('printSlipModal').classList.add('hidden');
+    }
+
+    function openExecutiveReportModal() {
+      const totalLeaves = leaveRecords.length;
+      const totalDays = leaveRecords.reduce((sum, r) => sum + r.days, 0);
+
+      document.getElementById('repSummaryStaffCount').innerText = `${users.length} ท่าน`;
+      document.getElementById('repSummaryLeavesCount').innerText = `${totalLeaves} ครั้ง`;
+      document.getElementById('repSummaryDaysTotal').innerText = `${totalDays} วัน`;
+
+      const tbody = document.getElementById('executiveReportTbody');
+      tbody.innerHTML = users.map((u, idx) => {
+        const uLeaves = leaveRecords.filter(r => r.userId === u.id);
+        const uDays = uLeaves.reduce((sum, r) => sum + r.days, 0);
+        const remain = Math.max(0, u.annualQuota - uDays);
+
+        return `
+          <tr>
+            <td class="p-2 border border-slate-200 text-center">${idx + 1}</td>
+            <td class="p-2 border border-slate-200 font-semibold">${u.fullName}</td>
+            <td class="p-2 border border-slate-200">${u.department}</td>
+            <td class="p-2 border border-slate-200">${u.position}</td>
+            <td class="p-2 border border-slate-200 text-center font-bold">${uLeaves.length}</td>
+            <td class="p-2 border border-slate-200 text-center font-bold text-sky-700">${uDays}</td>
+            <td class="p-2 border border-slate-200 text-center text-emerald-700 font-bold">${remain}</td>
+          </tr>
+        `;
+      }).join('');
+
+      document.getElementById('executiveReportModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeExecutiveReportModal() {
+      document.getElementById('executiveReportModal').classList.add('hidden');
+    }
+
+    function exportCSV(onlyCurrentUser) {
+      const recordsToExport = onlyCurrentUser && currentUser
+        ? leaveRecords.filter(r => r.userId === currentUser.id)
+        : leaveRecords;
+
+      let csv = "\uFEFFรหัสอ้างอิง,วันที่แจ้ง,รหัสผู้ใช้,ชื่อบุคลากร,ฝ่ายงาน,ตำแหน่ง,ประเภท,วันที่เริ่มต้น,วันที่สิ้นสุด,ช่วงเวลา,จำนวนวันลา,เหตุผลการลา,ผู้ปฏิบัติหน้าที่แทน,เบอร์ติดต่อ,สถานะ\n";
+      
+      recordsToExport.forEach(r => {
+        csv += `"${r.id}","${r.loggedAt}","${r.userId}","${r.userName}","${r.userDepartment}","${r.userPosition}","${r.leaveType}","${r.startDate}","${r.endDate}","${r.period}","${r.days}","${r.reason.replace(/"/g, '""')}","${(r.substitute || '').replace(/"/g, '""')}","${r.contact}","${r.status}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = onlyCurrentUser ? `my_leave_records.csv` : `agency_leave_report_2569.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("ดาวน์โหลดไฟล์ CSV เรียบร้อยแล้ว");
+    }
+
+    function formatDateThai(dateStr) {
+      if (!dateStr) return '';
+      const parts = dateStr.split('-');
+      const y = parseInt(parts[0], 10) + 543;
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+      return `${d} ${thaiMonths[m - 1]} ${y}`;
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').innerText = msg;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3200);
+    }
+  </script>
+</body>
+</html>
